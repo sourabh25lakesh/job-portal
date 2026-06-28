@@ -20,16 +20,13 @@ def require_role(
         )
     ):
 
-        # Convert role to lowercase
         user_role = current_user.role.lower()
 
-        # Convert allowed roles to lowercase
         allowed_roles_lower = [
             role.lower()
             for role in allowed_roles
         ]
 
-        # Check Permission
         if user_role not in allowed_roles_lower:
 
             raise HTTPException(

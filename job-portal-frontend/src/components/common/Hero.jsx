@@ -33,14 +33,14 @@ function Hero() {
 
     return (
 
-        <section className="bg-gray-50 min-h-[90vh] flex items-center">
+        <section className="flex min-h-[80vh] items-center bg-gray-50">
 
-            <div className="max-w-7xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
+            <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 md:grid-cols-2 lg:gap-12 lg:py-20">
 
                 {/* ================= LEFT CONTENT ================= */}
                 <div>
 
-                    <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight">
+                    <h1 className="text-3xl font-bold leading-tight text-gray-900 sm:text-5xl md:text-6xl">
 
                         Find Your
                         <span className="text-blue-600"> Dream Job </span>
@@ -48,7 +48,7 @@ function Hero() {
 
                     </h1>
 
-                    <p className="mt-6 text-lg text-gray-600 leading-relaxed max-w-xl">
+                    <p className="mt-5 max-w-xl text-base leading-relaxed text-gray-600 sm:mt-6 sm:text-lg">
 
                         Discover thousands of job opportunities with all the
                         information you need. Its your future. Come find it.
@@ -56,7 +56,7 @@ function Hero() {
                     </p>
 
                     {/* ================= SEARCH BOX ================= */}
-                    <div className="mt-8 flex flex-col sm:flex-row gap-4">
+                    <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
 
                         <input
                             type="text"
@@ -101,7 +101,7 @@ function Hero() {
                     </div>
 
                     {/* ================= BUTTONS ================= */}
-                    <div className="mt-8 flex flex-wrap gap-4">
+                    <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
 
                         <button
                             onClick={() => navigate("/jobs")}
@@ -150,7 +150,7 @@ function Hero() {
                     <img
                         src="https://illustrations.popsy.co/gray/work-from-home.svg"
                         alt="Hero"
-                        className="w-full max-w-lg drop-shadow-lg"
+                    className="w-full max-w-sm drop-shadow-lg sm:max-w-lg"
                     />
 
                 </div>

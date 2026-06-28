@@ -25,6 +25,34 @@ router = APIRouter(
 )
 
 
+def get_or_create_candidate_profile(
+    db: Session,
+    current_user: User,
+):
+    profile = db.query(
+        CandidateProfile
+    ).filter(
+        CandidateProfile.user_id == current_user.id
+    ).first()
+
+    if profile:
+        return profile
+
+    profile = CandidateProfile(
+        user_id=current_user.id,
+        bio="",
+        skills="",
+        experience="",
+        education="",
+    )
+
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    return profile
+
+
 # =========================
 # CREATE OR UPDATE PROFILE
 # =========================
@@ -98,18 +126,16 @@ def get_my_profile(
 
 ):
 
-    profile = db.query(
-        CandidateProfile
-    ).filter(
-        CandidateProfile.user_id == current_user.id
-    ).first()
-
-    if not profile:
-
+    if current_user.role != "candidate":
         raise HTTPException(
-            status_code=404,
-            detail="Profile not found"
+            status_code=403,
+            detail="Only candidates can access candidate profile"
         )
+
+    profile = get_or_create_candidate_profile(
+        db=db,
+        current_user=current_user
+    )
 
     return profile
 

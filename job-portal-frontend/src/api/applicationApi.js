@@ -1,5 +1,7 @@
 import axiosInstance from "./axios";
 
+import { normalizeApplicationStatus } from "../utils/applicationStatus";
+
 // ================= APPLY JOB =================
 export const applyJob = async (jobId) => {
     const response = await axiosInstance.post(
@@ -50,14 +52,20 @@ export const updateApplicationStatus = async (
     applicationId,
     status
 ) => {
-    const response = await axiosInstance.put(
+    const response = await axiosInstance.patch(
         `/applications/${applicationId}/status`,
-        null,
         {
-            params: {
-                status
-            }
+            status: normalizeApplicationStatus(status),
         }
+    );
+
+    return response.data;
+};
+
+// ================= APPROVED INTERVIEWS =================
+export const getMyInterviews = async () => {
+    const response = await axiosInstance.get(
+        "/applications/interviews"
     );
 
     return response.data;

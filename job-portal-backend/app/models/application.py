@@ -74,3 +74,10 @@ class Application(Base):
         "Job",
         back_populates="applications"
     )
+
+    interview_request = relationship(
+        "InterviewRequest",
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )

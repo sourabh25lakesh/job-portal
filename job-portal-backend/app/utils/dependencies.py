@@ -50,7 +50,7 @@ def get_current_user(
 
         raise credentials_exception
 
-    # Token sub can be user id OR email
+    
     if str(user_value).isdigit():
 
         user = db.query(User).filter(

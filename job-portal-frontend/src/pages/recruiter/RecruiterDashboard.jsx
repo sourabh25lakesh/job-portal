@@ -1,6 +1,7 @@
 import {
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react";
 
@@ -11,19 +12,40 @@ import {
     getRecruiterApplicants,
 } from "../../api/recruiterApi";
 
+import {
+    getApplicationStatusClass,
+    getApplicationStatusLabel,
+    normalizeApplicationStatus,
+} from "../../utils/applicationStatus";
+
 function RecruiterDashboard() {
     const [dashboardData, setDashboardData] = useState(null);
     const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState("");
+    const refreshIntervalRef = useRef(null);
 
-    useEffect(() => {
-        fetchRecruiterDashboard();
-    }, []);
+    const getApplicationsSnapshot = (items) => {
+        return JSON.stringify(
+            items.map((application) => ({
+                id: application.id,
+                job_id: application.job_id,
+                status: normalizeApplicationStatus(application.status),
+                resume_viewed: Boolean(application.resume_viewed),
+                updated_at: application.updated_at || null,
+                candidate_id: application.candidate?.id || application.user_id || null,
+                candidate_name: application.candidate?.name || "",
+                resume_path: application.profile?.resume_path || "",
+            }))
+        );
+    };
 
-    const fetchRecruiterDashboard = async () => {
+    const fetchRecruiterDashboard = async (skipLoadingState = false) => {
         try {
-            setLoading(true);
+            if (!skipLoadingState) {
+                setLoading(true);
+            }
+
             setErrorMessage("");
 
             const [dashboardResponse, applicantsResponse] = await Promise.all([
@@ -32,21 +54,68 @@ function RecruiterDashboard() {
             ]);
 
             setDashboardData(dashboardResponse || null);
-            setApplications(Array.isArray(applicantsResponse) ? applicantsResponse : []);
+
+            const nextApplications = Array.isArray(applicantsResponse)
+                ? applicantsResponse
+                : [];
+
+            setApplications((previousApplications) =>
+                getApplicationsSnapshot(previousApplications) === getApplicationsSnapshot(nextApplications)
+                    ? previousApplications
+                    : nextApplications
+            );
         } catch (error) {
             console.log(error);
 
-            setErrorMessage(
-                error.response?.data?.detail ||
-                "Failed to load recruiter dashboard"
-            );
+            if (!skipLoadingState) {
+                setErrorMessage(
+                    error.response?.data?.detail ||
+                    "Failed to load recruiter dashboard"
+                );
 
-            setDashboardData(null);
-            setApplications([]);
+                setDashboardData(null);
+                setApplications([]);
+            }
         } finally {
-            setLoading(false);
+            if (!skipLoadingState) {
+                setLoading(false);
+            }
         }
     };
+
+    useEffect(() => {
+        const initialLoadTimer = window.setTimeout(() => {
+            fetchRecruiterDashboard();
+        }, 0);
+
+        refreshIntervalRef.current = setInterval(() => {
+            fetchRecruiterDashboard(true);
+        }, 10000);
+
+        const handleWindowFocus = () => {
+            fetchRecruiterDashboard(true);
+        };
+
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                fetchRecruiterDashboard(true);
+            }
+        };
+
+        window.addEventListener("focus", handleWindowFocus);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            window.clearTimeout(initialLoadTimer);
+
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+            }
+
+            window.removeEventListener("focus", handleWindowFocus);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, []);
 
     const groupedJobs = useMemo(() => {
         const map = new Map();
@@ -76,22 +145,29 @@ function RecruiterDashboard() {
     const totalApplications = applications.length;
 
     const pendingApplications = applications.filter(
-        (application) => application.status === "Pending"
+        (application) => normalizeApplicationStatus(application.status) === "pending"
     ).length;
 
     const shortlistedApplications = applications.filter(
-        (application) => application.status === "Shortlisted"
+        (application) => normalizeApplicationStatus(application.status) === "shortlisted"
     ).length;
 
     const rejectedApplications = applications.filter(
-        (application) => application.status === "Rejected"
+        (application) => normalizeApplicationStatus(application.status) === "rejected"
     ).length;
+
+    const totalJobs = dashboardData?.total_jobs || groupedJobs.length || 0;
+    const pendingJobs = dashboardData?.pending_jobs || 0;
+    const approvedJobs = dashboardData?.approved_jobs || 0;
+    const approvedInterviews = dashboardData?.approved_interviews || 0;
+    const shortlistedCandidates =
+        dashboardData?.shortlisted_candidates || shortlistedApplications;
 
     const cards = [
         {
             title: "Company Profile",
             description: "Add or update company details visible to candidates.",
-            icon: "🏢",
+            icon: "CP",
             bg: "bg-blue-100",
             hoverText: "group-hover:text-blue-600",
             link: "/recruiter/profile",
@@ -100,7 +176,7 @@ function RecruiterDashboard() {
         {
             title: "Post New Job",
             description: "Create professional job posts and attract candidates.",
-            icon: "💼",
+            icon: "NJ",
             bg: "bg-indigo-100",
             hoverText: "group-hover:text-indigo-600",
             link: "/recruiter/create-job",
@@ -109,16 +185,25 @@ function RecruiterDashboard() {
         {
             title: "My Jobs",
             description: "View your posted jobs and check applied candidates.",
-            icon: "📋",
+            icon: "MJ",
             bg: "bg-emerald-100",
             hoverText: "group-hover:text-emerald-600",
             link: "/recruiter/my-jobs",
-            count: dashboardData?.total_jobs || groupedJobs.length || 0,
+            count: totalJobs,
+        },
+        {
+            title: "Deleted Jobs",
+            description: "Recover jobs that were accidentally deleted.",
+            icon: "DJ",
+            bg: "bg-red-100",
+            hoverText: "group-hover:text-red-600",
+            link: "/recruiter/deleted-jobs",
+            count: null,
         },
         {
             title: "Applied Candidates",
             description: "View all candidates who applied to your jobs.",
-            icon: "👥",
+            icon: "AC",
             bg: "bg-yellow-100",
             hoverText: "group-hover:text-yellow-600",
             link: "/recruiter/applied-candidates",
@@ -127,7 +212,7 @@ function RecruiterDashboard() {
         {
             title: "Resume Review",
             description: "View candidate resumes and mark resume viewed status.",
-            icon: "📄",
+            icon: "RR",
             bg: "bg-purple-100",
             hoverText: "group-hover:text-purple-600",
             link: "/recruiter/resume-review",
@@ -136,7 +221,7 @@ function RecruiterDashboard() {
         {
             title: "Shortlist / Reject",
             description: "Shortlist candidates or reject applications.",
-            icon: "✅",
+            icon: "SR",
             bg: "bg-green-100",
             hoverText: "group-hover:text-green-600",
             link: "/recruiter/shortlist-reject",
@@ -146,27 +231,27 @@ function RecruiterDashboard() {
 
     const workflow = [
         {
-            step: "1️⃣",
+            step: "01",
             title: "Open My Jobs",
             description: "Check your posted jobs.",
             link: "/recruiter/my-jobs",
         },
         {
-            step: "2️⃣",
+            step: "02",
             title: "View Candidates",
             description: "See applied candidates.",
             link: "/recruiter/applied-candidates",
         },
         {
-            step: "3️⃣",
+            step: "03",
             title: "View Resume",
             description: "Open candidate resume.",
             link: "/recruiter/resume-review",
         },
         {
-            step: "4️⃣",
+            step: "04",
             title: "Select Status",
-            description: "Shortlist ✅ or reject ❌.",
+            description: "Shortlist or reject candidates.",
             link: "/recruiter/shortlist-reject",
         },
     ];
@@ -180,19 +265,19 @@ function RecruiterDashboard() {
     }
 
     return (
-        <section className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-12">
+        <section className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-8 sm:px-6 sm:py-12">
             <div className="mx-auto max-w-6xl">
 
-                <div className="mb-10 rounded-3xl bg-white p-8 shadow-xl shadow-blue-100">
+                <div className="mb-8 rounded-3xl bg-white p-5 shadow-xl shadow-blue-100 sm:mb-10 sm:p-8">
                     <span className="inline-flex rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">
                         Recruiter Panel
                     </span>
 
-                    <h1 className="mt-4 text-3xl font-bold text-slate-900 md:text-4xl">
+                    <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl md:text-4xl">
                         Recruiter Dashboard
                     </h1>
 
-                    <p className="mt-3 max-w-2xl text-slate-600">
+                    <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
                         Manage your company profile, post jobs, view applied candidates,
                         check resumes, and shortlist or reject candidates.
                     </p>
@@ -203,51 +288,69 @@ function RecruiterDashboard() {
                         </div>
                     )}
 
-                    <div className="mt-8 grid gap-4 md:grid-cols-4">
-                        <div className="rounded-2xl bg-blue-50 p-5">
+                    <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 md:grid-cols-3 lg:grid-cols-6">
+                        <div className="rounded-2xl bg-blue-50 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-5">
                             <p className="text-sm font-semibold text-blue-600">
                                 Total Jobs
                             </p>
-                            <h2 className="mt-2 text-3xl font-bold text-slate-900">
-                                {dashboardData?.total_jobs || groupedJobs.length || 0}
+                            <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                                {totalJobs}
                             </h2>
                         </div>
 
-                        <div className="rounded-2xl bg-yellow-50 p-5">
+                        <div className="rounded-2xl bg-yellow-50 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-5">
                             <p className="text-sm font-semibold text-yellow-700">
-                                Pending Review
+                                Pending Jobs
                             </p>
-                            <h2 className="mt-2 text-3xl font-bold text-slate-900">
-                                {pendingApplications}
+                            <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                                {pendingJobs}
                             </h2>
                         </div>
 
-                        <div className="rounded-2xl bg-green-50 p-5">
+                        <div className="rounded-2xl bg-green-50 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-5">
                             <p className="text-sm font-semibold text-green-700">
+                                Approved Jobs
+                            </p>
+                            <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                                {approvedJobs}
+                            </h2>
+                        </div>
+
+                        <div className="rounded-2xl bg-red-50 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-5">
+                            <p className="text-sm font-semibold text-red-700">
+                                Applications
+                            </p>
+                            <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                                {totalApplications}
+                            </h2>
+                        </div>
+
+                        <div className="rounded-2xl bg-purple-50 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-5">
+                            <p className="text-sm font-semibold text-purple-700">
                                 Shortlisted
                             </p>
-                            <h2 className="mt-2 text-3xl font-bold text-slate-900">
-                                {shortlistedApplications}
+                            <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                                {shortlistedCandidates}
                             </h2>
                         </div>
 
-                        <div className="rounded-2xl bg-red-50 p-5">
-                            <p className="text-sm font-semibold text-red-700">
-                                Rejected
+                        <div className="rounded-2xl bg-emerald-50 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-md sm:p-5">
+                            <p className="text-sm font-semibold text-emerald-700">
+                                Interviews
                             </p>
-                            <h2 className="mt-2 text-3xl font-bold text-slate-900">
-                                {rejectedApplications}
+                            <h2 className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">
+                                {approvedInterviews}
                             </h2>
                         </div>
                     </div>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {cards.map((card) => (
                         <Link
                             key={card.title}
                             to={card.link}
-                            className="group relative overflow-hidden rounded-3xl bg-white p-8 shadow-lg shadow-slate-200 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
+                            className="group relative overflow-hidden rounded-3xl bg-white p-5 shadow-lg shadow-slate-200 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl sm:p-8"
                         >
                             <div className="absolute right-0 top-0 h-24 w-24 rounded-bl-full bg-slate-50 transition-all duration-300 group-hover:scale-125"></div>
 
@@ -258,43 +361,43 @@ function RecruiterDashboard() {
                             )}
 
                             <div
-                                className={`relative mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${card.bg} text-2xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}
+                                className={`relative mb-5 flex h-12 w-12 items-center justify-center rounded-2xl ${card.bg} text-sm font-black transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 sm:h-14 sm:w-14`}
                             >
                                 {card.icon}
                             </div>
 
                             <h2
-                                className={`relative text-2xl font-bold text-slate-900 transition-colors duration-300 ${card.hoverText}`}
+                                className={`relative text-xl font-bold text-slate-900 transition-colors duration-300 sm:text-2xl ${card.hoverText}`}
                             >
                                 {card.title}
                             </h2>
 
-                            <p className="relative mt-3 text-slate-600">
+                            <p className="relative mt-3 text-sm text-slate-600 sm:text-base">
                                 {card.description}
                             </p>
 
                             <p className="relative mt-5 text-sm font-semibold text-blue-600 opacity-0 transition-all duration-300 group-hover:translate-x-1 group-hover:opacity-100">
-                                Click to continue →
+                                Click to continue
                             </p>
                         </Link>
                     ))}
                 </div>
 
-                <div className="mt-10 rounded-3xl bg-white p-8 shadow-xl shadow-slate-200">
+                <div className="mt-8 rounded-3xl bg-white p-5 shadow-xl shadow-slate-200 sm:mt-10 sm:p-8">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <h3 className="text-2xl font-bold text-slate-900">
+                            <h3 className="text-xl font-bold text-slate-900 sm:text-2xl">
                                 Latest Applications
                             </h3>
 
-                            <p className="mt-2 text-slate-600">
+                            <p className="mt-2 text-sm text-slate-600 sm:text-base">
                                 Candidate applications from your posted jobs.
                             </p>
                         </div>
 
                         <Link
                             to="/recruiter/applied-candidates"
-                            className="rounded-2xl bg-blue-600 px-6 py-3 text-center font-semibold text-white transition hover:bg-blue-700"
+                            className="w-full rounded-2xl bg-blue-600 px-6 py-3 text-center font-semibold text-white transition hover:bg-blue-700 md:w-auto"
                         >
                             View Applied Candidates
                         </Link>
@@ -305,7 +408,7 @@ function RecruiterDashboard() {
                             groupedJobs.map((job) => (
                                 <div
                                     key={job.id}
-                                    className="rounded-2xl border border-slate-100 bg-slate-50 p-5"
+                                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:p-5"
                                 >
                                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                                         <div>
@@ -316,11 +419,24 @@ function RecruiterDashboard() {
                                             <p className="text-sm text-slate-500">
                                                 {job.company_name} • {job.location}
                                             </p>
+
+                                            {Array.isArray(job.skills) && job.skills.length > 0 && (
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                    {job.skills.slice(0, 5).map((skill) => (
+                                                        <span
+                                                            key={skill}
+                                                            className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                                                        >
+                                                            {skill}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <Link
                                             to={`/recruiter/job-applications/${job.id}`}
-                                            className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                                            className="w-full rounded-full bg-blue-600 px-4 py-2 text-center text-sm font-semibold text-white transition hover:bg-blue-700 md:w-auto"
                                         >
                                             View {job.applications_count} Applications
                                         </Link>
@@ -345,8 +461,8 @@ function RecruiterDashboard() {
                                                 </p>
 
                                                 <div className="mt-3 flex flex-wrap gap-2">
-                                                    <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
-                                                        {application.status || "Pending"}
+                                                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getApplicationStatusClass(application.status)}`}>
+                                                        {getApplicationStatusLabel(application.status)}
                                                     </span>
 
                                                     <span
@@ -380,19 +496,19 @@ function RecruiterDashboard() {
                     </div>
                 </div>
 
-                <div className="mt-10 rounded-3xl bg-slate-900 p-8 text-white shadow-xl">
-                    <h3 className="text-2xl font-bold">
+                <div className="mt-8 rounded-3xl bg-slate-900 p-5 text-white shadow-xl sm:mt-10 sm:p-8">
+                    <h3 className="text-xl font-bold sm:text-2xl">
                         Recruiter Workflow
                     </h3>
 
-                    <div className="mt-6 grid gap-4 md:grid-cols-4">
+                    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {workflow.map((item) => (
                             <Link
                                 key={item.title}
                                 to={item.link}
                                 className="rounded-2xl bg-white/10 p-5 transition-all duration-300 hover:-translate-y-2 hover:bg-white/20 hover:shadow-lg"
                             >
-                                <p className="text-3xl">
+                                <p className="text-sm font-black text-blue-200">
                                     {item.step}
                                 </p>
 

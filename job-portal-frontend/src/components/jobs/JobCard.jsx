@@ -2,9 +2,9 @@ function JobCard({ job }) {
 
     return (
 
-        <div className="bg-white border border-gray-200 rounded-2xl p-7 shadow-sm hover:shadow-xl transition duration-300">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl sm:p-7">
 
-            <h3 className="text-2xl font-semibold text-gray-900">
+            <h3 className="break-words text-xl font-semibold text-gray-900 sm:text-2xl">
                 {job.title}
             </h3>
 
@@ -12,8 +12,8 @@ function JobCard({ job }) {
                 {job.company}
             </p>
 
-            <p className="mt-2 text-gray-500">
-                📍 {job.location}
+            <p className="mt-2 text-sm text-gray-500 sm:text-base">
+                Location: {job.location}
             </p>
 
             <span className="inline-block mt-4 bg-blue-100 text-blue-600 px-4 py-2 rounded-lg text-sm font-medium">

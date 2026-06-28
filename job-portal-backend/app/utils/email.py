@@ -14,7 +14,6 @@ from pydantic import EmailStr
 
 load_dotenv()
 
-# Force Python SMTP connection to prefer IPv4
 _original_getaddrinfo = socket.getaddrinfo
 
 

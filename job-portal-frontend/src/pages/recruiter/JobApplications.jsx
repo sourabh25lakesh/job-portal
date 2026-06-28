@@ -50,6 +50,51 @@ function JobApplications() {
         return fallbackMessage;
     };
 
+    const broadcastApplicationUpdate = (eventName, payload) => {
+        const application = payload?.application || null;
+        const applicationId = application?.id ?? payload?.applicationId;
+
+        if (!applicationId) {
+            return;
+        }
+
+        const update = {
+            applicationId,
+            application,
+            status: application?.status ?? payload?.status,
+            resume_viewed: application?.resume_viewed ?? payload?.resume_viewed,
+            timestamp: new Date().toISOString(),
+        };
+
+        window.dispatchEvent(new CustomEvent(eventName, {
+            detail: update,
+        }));
+
+        localStorage.setItem(
+            eventName === "applicationResumeViewed"
+                ? "lastApplicationResumeViewed"
+                : "lastApplicationUpdate",
+            JSON.stringify(update)
+        );
+    };
+
+    const mergeApplicationIntoState = (updatedApplication) => {
+        if (!updatedApplication?.id) {
+            return;
+        }
+
+        setApplications((previousApplications) =>
+            previousApplications.map((application) =>
+                String(application.id) === String(updatedApplication.id)
+                    ? {
+                        ...application,
+                        ...updatedApplication,
+                    }
+                    : application
+            )
+        );
+    };
+
     const loadApplications = async () => {
         try {
             setLoading(true);
@@ -108,6 +153,14 @@ function JobApplications() {
 
             window.open(resumeUrl, "_blank", "noopener,noreferrer");
 
+            mergeApplicationIntoState(response?.application);
+
+            broadcastApplicationUpdate("applicationResumeViewed", {
+                applicationId,
+                application: response?.application,
+                resume_viewed: true,
+            });
+
             toast.success("Resume opened successfully");
 
             await loadApplications();
@@ -130,39 +183,20 @@ function JobApplications() {
             setErrorMessage("");
 
             const normalizedStatus = normalizeStatus(status);
-            console.log("🚀 RECRUITER: Sending status update:", { applicationId, normalizedStatus });
             const response = await updateRecruiterApplicationStatus(applicationId, normalizedStatus);
-            console.log("✅ RECRUITER: Backend response:", response);
+            const updatedApplication = response?.application;
 
-            // Store update globally with timestamp for all candidate tabs to detect
-            const updateKey = `applicationUpdate_${applicationId}_${Date.now()}`;
-            localStorage.setItem(
-                updateKey,
-                JSON.stringify({
-                    applicationId,
-                    status: normalizedStatus,
-                    timestamp: new Date().toISOString(),
-                })
-            );
-            console.log("📱 RECRUITER: Set localStorage key:", updateKey);
+            if (normalizeStatus(updatedApplication?.status) !== normalizedStatus) {
+                throw new Error("Status was not saved by the backend");
+            }
 
-            // Also dispatch event for same-tab updates
-            window.dispatchEvent(new CustomEvent("applicationStatusUpdated", {
-                detail: {
-                    applicationId: applicationId,
-                    status: normalizedStatus,
-                    timestamp: new Date().toISOString(),
-                }
-            }));
-            console.log("📡 RECRUITER: Dispatched CustomEvent");
+            mergeApplicationIntoState(updatedApplication);
 
-            // Broadcast to all tabs using a marker key
-            localStorage.setItem("lastApplicationUpdate", JSON.stringify({
+            broadcastApplicationUpdate("applicationStatusUpdated", {
                 applicationId,
+                application: updatedApplication,
                 status: normalizedStatus,
-                timestamp: new Date().toISOString(),
-            }));
-            console.log("🎯 RECRUITER: Set lastApplicationUpdate key in localStorage:", { applicationId, status: normalizedStatus });
+            });
 
             toast.success(
                 normalizedStatus === "shortlisted"
@@ -170,7 +204,7 @@ function JobApplications() {
                     : "Candidate rejected successfully"
             );
 
-            await loadApplications();
+            loadApplications();
         } catch (error) {
             const message = getSafeErrorMessage(
                 error,
@@ -226,35 +260,28 @@ function JobApplications() {
         return "Pending";
     };
 
-    const getStatusIcon = (status) => {
-        const normalizedStatus = normalizeStatus(status);
-        if (normalizedStatus === "shortlisted") return "✅";
-        if (normalizedStatus === "rejected") return "❌";
-        return "⏳";
-    };
-
     return (
-        <section className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-10">
+        <section className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-8 sm:px-6 sm:py-10">
             <div className="mx-auto max-w-7xl">
-                <div className="mb-8 rounded-3xl bg-white p-8 shadow-xl shadow-blue-100">
+                <div className="mb-8 rounded-3xl bg-white p-5 shadow-xl shadow-blue-100 sm:p-8">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <span className="inline-flex rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">
                                 Recruiter Applications
                             </span>
 
-                            <h1 className="mt-4 text-3xl font-bold text-slate-900">
+                            <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">
                                 Applied Candidates
                             </h1>
 
-                            <p className="mt-2 text-slate-600">
+                            <p className="mt-2 text-sm text-slate-600 sm:text-base">
                                 Review candidate profiles, view resumes, shortlist or reject applications.
                             </p>
                         </div>
 
                         <Link
                             to="/recruiter/my-jobs"
-                            className="rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-100"
+                            className="w-full rounded-xl border border-slate-300 px-5 py-3 text-center font-semibold text-slate-700 hover:bg-slate-100 md:w-auto"
                         >
                             Back to My Jobs
                         </Link>
@@ -263,7 +290,7 @@ function JobApplications() {
 
                 {errorMessage && (
                     <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 font-medium text-red-700">
-                        ❌ {String(errorMessage)}
+                        {String(errorMessage)}
                     </div>
                 )}
 
@@ -272,10 +299,12 @@ function JobApplications() {
                         <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
                     </div>
                 ) : applications.length === 0 ? (
-                    <div className="rounded-3xl bg-white p-12 text-center shadow-lg">
-                        <div className="text-6xl">📭</div>
+                    <div className="rounded-3xl bg-white p-6 text-center shadow-lg sm:p-12">
+                        <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-xl font-black text-blue-700">
+                            AP
+                        </div>
 
-                        <h2 className="mt-4 text-2xl font-bold text-slate-900">
+                        <h2 className="mt-4 text-xl font-bold text-slate-900 sm:text-2xl">
                             No Applications Yet
                         </h2>
 
@@ -284,7 +313,7 @@ function JobApplications() {
                         </p>
                     </div>
                 ) : (
-                    <div className="grid gap-6">
+                    <div className="grid gap-4 sm:gap-6">
                         {applications.map((application) => {
                             const rawStatus = application?.status || "pending";
                             const status = normalizeStatus(rawStatus);
@@ -297,23 +326,23 @@ function JobApplications() {
                             return (
                                 <div
                                     key={application.id}
-                                    className="rounded-3xl bg-white p-6 shadow-lg shadow-slate-200 transition hover:-translate-y-1 hover:shadow-2xl"
+                                    className="rounded-3xl bg-white p-5 shadow-lg shadow-slate-200 transition hover:-translate-y-1 hover:shadow-2xl sm:p-6"
                                 >
                                     <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-4">
-                                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-xl font-bold text-blue-700">
+                                            <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-lg font-bold text-blue-700 sm:h-14 sm:w-14 sm:text-xl">
                                                     {application?.candidate?.name
                                                         ?.charAt(0)
                                                         ?.toUpperCase() || "C"}
                                                 </div>
 
-                                                <div>
-                                                    <h2 className="text-2xl font-bold text-slate-900">
+                                                <div className="min-w-0">
+                                                    <h2 className="break-words text-xl font-bold text-slate-900 sm:text-2xl">
                                                         {application?.candidate?.name || "Candidate Name"}
                                                     </h2>
 
-                                                    <p className="text-slate-600">
+                                                    <p className="break-words text-sm text-slate-600 sm:text-base">
                                                         {application?.candidate?.email || "Candidate Email"}
                                                     </p>
 
@@ -371,26 +400,26 @@ function JobApplications() {
                                                 <span
                                                     className={`rounded-full px-4 py-2 text-sm font-semibold ${getStatusBadge(status)}`}
                                                 >
-                                                    {getStatusIcon(status)} {getStatusDisplayText(status)}
+                                                    {getStatusDisplayText(status)}
                                                 </span>
 
                                                 {application?.resume_viewed ? (
                                                     <span className="rounded-full bg-green-100 px-4 py-2 text-sm font-semibold text-green-700">
-                                                        ✅ Resume Viewed
+                                                        Resume Viewed
                                                     </span>
                                                 ) : (
                                                     <span className="rounded-full bg-yellow-100 px-4 py-2 text-sm font-semibold text-yellow-700">
-                                                        ⏳ Resume Not Viewed
+                                                        Resume Not Viewed
                                                     </span>
                                                 )}
 
                                                 {resumeUrl ? (
                                                     <span className="rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">
-                                                        📄 Resume Available
+                                                        Resume Available
                                                     </span>
                                                 ) : (
                                                     <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">
-                                                        📄 No Resume
+                                                        No Resume
                                                     </span>
                                                 )}
                                             </div>
@@ -403,7 +432,7 @@ function JobApplications() {
                                                 disabled={isLoading || !resumeUrl}
                                                 className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                                             >
-                                                {isLoading ? "Please wait..." : "📄 View Resume"}
+                                                {isLoading ? "Please wait..." : "View Resume"}
                                             </button>
 
                                             <button
@@ -417,7 +446,7 @@ function JobApplications() {
                                                 disabled={isLoading || status === "shortlisted"}
                                                 className="rounded-xl bg-green-600 px-5 py-3 font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                                             >
-                                                {status === "shortlisted" ? "✅ Shortlisted" : "✅ Shortlist"}
+                                                {status === "shortlisted" ? "Shortlisted" : "Shortlist"}
                                             </button>
 
                                             <button
@@ -431,7 +460,7 @@ function JobApplications() {
                                                 disabled={isLoading || status === "rejected"}
                                                 className="rounded-xl bg-red-600 px-5 py-3 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                             >
-                                                {status === "rejected" ? "❌ Rejected" : "❌ Reject"}
+                                                {status === "rejected" ? "Rejected" : "Reject"}
                                             </button>
                                         </div>
                                     </div>

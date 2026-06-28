@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from app.database.db import get_db
 
@@ -8,6 +8,7 @@ from app.models.recruiter import RecruiterProfile
 from app.models.job import Job
 from app.models.application import Application
 from app.models.candidate_profile import CandidateProfile
+from app.models.interview_request import InterviewRequest
 
 from app.schemas.recruiter import (
     RecruiterCreate,
@@ -22,6 +23,81 @@ router = APIRouter(
     prefix="/recruiters",
     tags=["Recruiters"]
 )
+
+
+def normalize_text(value):
+    if not value:
+        return ""
+
+    return str(value).strip().lower()
+
+
+def normalize_status(status):
+    value = normalize_text(status)
+
+    if value in ["shortlisted", "shortlist"]:
+        return "shortlisted"
+
+    if value in ["rejected", "reject"]:
+        return "rejected"
+
+    return "pending"
+
+
+def status_label(status):
+    clean_status = normalize_status(status)
+
+    if clean_status == "shortlisted":
+        return "Shortlisted"
+
+    if clean_status == "rejected":
+        return "Rejected"
+
+    return "Pending"
+
+
+def normalize_job_status(status):
+    value = normalize_text(status)
+
+    if value in ["approved", "approve"]:
+        return "approved"
+
+    if value in ["rejected", "reject"]:
+        return "rejected"
+
+    return "pending"
+
+
+def normalize_skills(skills):
+    if not skills:
+        return []
+
+    try:
+        parsed = json.loads(skills) if isinstance(skills, str) else skills
+        items = parsed if isinstance(parsed, list) else []
+    except json.JSONDecodeError:
+        items = str(skills).split(",")
+
+    return [
+        str(skill).strip()
+        for skill in items
+        if str(skill or "").strip()
+    ]
+
+
+def display_user_name(user):
+    if not user:
+        return "Candidate"
+
+    name = str(user.name or "").strip()
+
+    if name and name.lower() not in ["undefined", "null", "none"]:
+        return name
+
+    if user.email:
+        return user.email.split("@")[0]
+
+    return "Candidate"
 
 
 # ================= CREATE OR UPDATE RECRUITER PROFILE =================
@@ -138,6 +214,8 @@ def recruiter_dashboard(
 
     jobs_query = db.query(Job).options(
         joinedload(Job.applications)
+    ).filter(
+        Job.is_deleted == False
     )
 
     if current_user.role != "admin":
@@ -146,10 +224,12 @@ def recruiter_dashboard(
         ).first()
 
         if recruiter_profile and recruiter_profile.company_name:
+            company_name = normalize_text(recruiter_profile.company_name)
+
             jobs_query = jobs_query.filter(
                 or_(
                     Job.user_id == current_user.id,
-                    Job.company_name == recruiter_profile.company_name
+                    func.lower(func.trim(Job.company_name)) == company_name
                 )
             )
         else:
@@ -167,8 +247,21 @@ def recruiter_dashboard(
     pending_applications = 0
     shortlisted_applications = 0
     rejected_applications = 0
+    pending_jobs = 0
+    approved_jobs = 0
+    rejected_jobs = 0
+    approved_interviews = 0
 
     for job in jobs:
+        job_status = normalize_job_status(job.status)
+
+        if job_status == "pending":
+            pending_jobs += 1
+        elif job_status == "approved":
+            approved_jobs += 1
+        elif job_status == "rejected":
+            rejected_jobs += 1
+
         applications = db.query(Application).options(
             joinedload(Application.user),
             joinedload(Application.job)
@@ -181,16 +274,21 @@ def recruiter_dashboard(
         application_list = []
 
         for application in applications:
-            status = application.status or "Pending"
+            status = normalize_status(application.status)
 
             total_applications += 1
 
-            if status == "Pending":
+            if status == "pending":
                 pending_applications += 1
-            elif status == "Shortlisted":
+            elif status == "shortlisted":
                 shortlisted_applications += 1
-            elif status == "Rejected":
+            elif status == "rejected":
                 rejected_applications += 1
+
+            approved_interviews += db.query(InterviewRequest).filter(
+                InterviewRequest.application_id == application.id,
+                InterviewRequest.status == "approved"
+            ).count()
 
             profile = db.query(CandidateProfile).filter(
                 CandidateProfile.user_id == application.user_id
@@ -201,13 +299,13 @@ def recruiter_dashboard(
                 "user_id": application.user_id,
                 "job_id": application.job_id,
                 "status": status,
+                "status_label": status_label(status),
                 "resume_viewed": application.resume_viewed or False,
                 "created_at": application.created_at,
-                "updated_at": application.updated_at,
-
+                "updated_at": application.updated_at,   
                 "candidate": {
                     "id": application.user.id if application.user else None,
-                    "name": application.user.name if application.user else "Candidate",
+                    "name": display_user_name(application.user),
                     "email": application.user.email if application.user else None,
                     "role": application.user.role if application.user else "candidate",
                 },
@@ -228,15 +326,26 @@ def recruiter_dashboard(
             "location": job.location,
             "salary": job.salary,
             "description": job.description,
+            "skills": normalize_skills(job.skills),
+            "status": job_status,
+            "rejection_reason": job.rejection_reason,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
             "applications_count": len(application_list),
             "applications": application_list,
         })
 
     return {
         "total_jobs": len(jobs),
+        "pending_jobs": pending_jobs,
+        "approved_jobs": approved_jobs,
+        "rejected_jobs": rejected_jobs,
         "total_applications": total_applications,
         "pending_applications": pending_applications,
         "shortlisted_applications": shortlisted_applications,
         "rejected_applications": rejected_applications,
+        "shortlisted_candidates": shortlisted_applications,
+        "approved_interviews": approved_interviews,
         "jobs": result
     }
+import json

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
 
 import {
     getCandidateProfile,
@@ -49,8 +50,6 @@ function CandidateProfile() {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [message, setMessage] = useState("");
-    const [error, setError] = useState("");
     const [skillSearch, setSkillSearch] = useState("");
     const [showEditForm, setShowEditForm] = useState(false);
 
@@ -89,10 +88,9 @@ function CandidateProfile() {
                 education: data?.education || "",
             });
 
-            setError("");
         } catch (err) {
-            setError("Please complete your candidate profile.");
             setShowEditForm(true);
+            toast.error("Please complete your candidate profile.");
         } finally {
             setLoading(false);
         }
@@ -136,16 +134,14 @@ function CandidateProfile() {
 
         try {
             setSaving(true);
-            setMessage("");
-            setError("");
 
             await updateCandidateProfile(profile);
             await fetchProfile();
 
-            setMessage("Profile updated successfully.");
+            toast.success("Profile updated successfully.");
             setShowEditForm(false);
         } catch (err) {
-            setError("Profile update failed.");
+            toast.error("Profile update failed.");
         } finally {
             setSaving(false);
         }
@@ -166,37 +162,25 @@ function CandidateProfile() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 px-4 py-8">
+        <div className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 sm:py-10">
             <div className="max-w-6xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">
+                <div className="mb-6 sm:mb-8">
+                    <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
                         Candidate Profile
                     </h1>
 
-                    <p className="text-gray-500 mt-2">
+                    <p className="mt-2 text-sm text-gray-500 sm:text-base">
                         Manage your profile, resume, skills, and job applications.
                     </p>
                 </div>
 
-                {message && (
-                    <div className="mb-5 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl">
-                        {message}
-                    </div>
-                )}
-
-                {error && (
-                    <div className="mb-5 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
-                        {error}
-                    </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
                     <div className="lg:col-span-1 space-y-6">
                         <ProfileCard completionPercentage={completionPercentage} />
 
                         <ResumeUpload onSuccess={fetchProfile} />
 
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-6">
                             <div className="flex items-center justify-between mb-5">
                                 <h2 className="text-xl font-bold text-gray-900">
                                     Skills
@@ -233,7 +217,7 @@ function CandidateProfile() {
                             )}
                         </div>
 
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-6">
                             <h2 className="text-xl font-bold text-gray-900 mb-5">
                                 Quick Actions
                             </h2>
@@ -264,26 +248,22 @@ function CandidateProfile() {
                     </div>
 
                     <div className="lg:col-span-2 space-y-6">
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">
+                        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-6">
+                            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
                                     My Profile
                                 </h2>
 
                                 <button
                                     type="button"
-                                    onClick={() => setShowEditForm(!showEditForm)}
-                                    className={`px-4 py-2 rounded-xl font-semibold transition ${
-                                        showEditForm
-                                            ? "bg-red-50 text-red-600 hover:bg-red-100"
-                                            : "bg-blue-600 text-white hover:bg-blue-700"
-                                    }`}
+                                    onClick={() => setShowEditForm(true)}
+                                    className="w-full rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white transition duration-300 hover:-translate-y-1 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-100 sm:w-auto"
                                 >
-                                    {showEditForm ? "✕ Close Edit" : "✏️ Edit Profile"}
+                                    Edit Profile
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
                                 <div className="bg-gray-50 rounded-xl p-4">
                                     <p className="text-sm text-gray-500 font-semibold mb-1">
                                         Bio / About
@@ -340,84 +320,103 @@ function CandidateProfile() {
                         </div>
 
                         {showEditForm && (
-                            <form
-                                onSubmit={handleSubmit}
-                                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"
-                            >
-                                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                                    Edit Profile
-                                </h2>
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-3 py-4 sm:px-4 sm:py-8">
+                                <form
+                                    onSubmit={handleSubmit}
+                                    className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-gray-100 bg-white p-5 shadow-2xl sm:p-6"
+                                >
+                                    <div className="mb-6 flex items-start justify-between gap-4 border-b border-gray-100 pb-5">
+                                        <div>
+                                            <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
+                                                Edit Profile
+                                            </h2>
 
-                                <div className="mb-5">
-                                    <label className="block font-semibold text-gray-700 mb-2">
-                                        Bio / About
-                                    </label>
-
-                                    <textarea
-                                        name="bio"
-                                        value={profile.bio}
-                                        onChange={handleChange}
-                                        rows="4"
-                                        placeholder="Write something about yourself..."
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-
-                                <div className="mb-5">
-                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-                                        <label className="block font-semibold text-gray-700">
-                                            Skills
-                                        </label>
-
-                                        <div className="w-full md:w-80 relative">
-                                            <input
-                                                type="text"
-                                                value={skillSearch}
-                                                onChange={(e) =>
-                                                    setSkillSearch(e.target.value)
-                                                }
-                                                placeholder="Search language / skill..."
-                                                className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-
-                                            {skillSearch && (
-                                                <div className="absolute z-20 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-lg max-h-56 overflow-y-auto">
-                                                    {filteredSkills.length > 0 ? (
-                                                        filteredSkills.map((skill) => (
-                                                            <button
-                                                                key={skill}
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    handleAddSkill(skill)
-                                                                }
-                                                                className="w-full text-left px-4 py-3 hover:bg-blue-50 transition text-gray-700 font-medium"
-                                                            >
-                                                                {skill}
-                                                            </button>
-                                                        ))
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                handleAddSkill(skillSearch)
-                                                            }
-                                                            className="w-full text-left px-4 py-3 hover:bg-blue-50 transition text-blue-600 font-semibold"
-                                                        >
-                                                            Add "{skillSearch}"
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                Update your profile details shown to recruiters.
+                                            </p>
                                         </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowEditForm(false)}
+                                            disabled={saving}
+                                            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gray-100 font-bold text-gray-600 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+                                            aria-label="Close edit profile modal"
+                                        >
+                                            X
+                                        </button>
                                     </div>
 
-                                    <select
-                                        value=""
-                                        onChange={(e) =>
-                                            handleAddSkill(e.target.value)
-                                        }
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                    >
+                                    <div className="mb-5">
+                                        <label className="mb-2 block font-semibold text-gray-700">
+                                            Bio / About
+                                        </label>
+
+                                        <textarea
+                                            name="bio"
+                                            value={profile.bio}
+                                            onChange={handleChange}
+                                            rows="4"
+                                            placeholder="Write something about yourself..."
+                                            className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+
+                                    <div className="mb-5">
+                                        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                            <label className="block font-semibold text-gray-700">
+                                                Skills
+                                            </label>
+
+                                            <div className="w-full md:w-80 relative">
+                                                <input
+                                                    type="text"
+                                                    value={skillSearch}
+                                                    onChange={(e) =>
+                                                        setSkillSearch(e.target.value)
+                                                    }
+                                                    placeholder="Search language / skill..."
+                                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
+                                                />
+
+                                                {skillSearch && (
+                                                    <div className="absolute z-20 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+                                                        {filteredSkills.length > 0 ? (
+                                                            filteredSkills.map((skill) => (
+                                                                <button
+                                                                    key={skill}
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        handleAddSkill(skill)
+                                                                    }
+                                                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition text-gray-700 font-medium"
+                                                                >
+                                                                    {skill}
+                                                                </button>
+                                                            ))
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    handleAddSkill(skillSearch)
+                                                                }
+                                                                className="w-full text-left px-4 py-3 hover:bg-blue-50 transition text-blue-600 font-semibold"
+                                                            >
+                                                                Add "{skillSearch}"
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <select
+                                            value=""
+                                            onChange={(e) =>
+                                                handleAddSkill(e.target.value)
+                                            }
+                                            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
+                                        >
                                         <option value="">
                                             Select skill from dropdown
                                         </option>
@@ -477,7 +476,7 @@ function CandidateProfile() {
                                         onChange={handleChange}
                                         rows="4"
                                         placeholder="Add your work experience..."
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
 
@@ -492,18 +491,19 @@ function CandidateProfile() {
                                         onChange={handleChange}
                                         rows="4"
                                         placeholder="Add your education details..."
-                                        className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
 
                                 <button
                                     type="submit"
                                     disabled={saving}
-                                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
+                                    className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition duration-300 hover:-translate-y-1 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-100 disabled:bg-blue-400"
                                 >
                                     {saving ? "Saving..." : "Save Profile"}
                                 </button>
-                            </form>
+                                </form>
+                            </div>
                         )}
                     </div>
                 </div>

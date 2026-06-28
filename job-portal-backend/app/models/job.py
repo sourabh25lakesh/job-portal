@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.database.db import Base
@@ -38,6 +40,45 @@ class Job(Base):
 
     description = Column(
         Text,
+        nullable=False
+    )
+
+    skills = Column(
+        Text,
+        nullable=True
+    )
+
+    # Jobs remain hidden from candidates until an admin approves them.
+    status = Column(
+        String(50),
+        nullable=False,
+        default="pending",
+        index=True
+    )
+
+    rejection_reason = Column(
+        Text,
+        nullable=True
+    )
+
+    is_deleted = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
         nullable=False
     )
 

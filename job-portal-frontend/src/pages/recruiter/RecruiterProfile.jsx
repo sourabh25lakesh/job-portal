@@ -91,19 +91,19 @@ function RecruiterProfile() {
     }
 
     return (
-        <section className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-12">
+        <section className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-8 sm:px-6 sm:py-12">
             <div className="mx-auto max-w-3xl">
-                <div className="rounded-3xl bg-white p-6 shadow-xl shadow-blue-100 md:p-10">
-                    <div className="mb-8">
+                <div className="rounded-3xl bg-white p-5 shadow-xl shadow-blue-100 sm:p-6 md:p-10">
+                    <div className="mb-6 sm:mb-8">
                         <span className="inline-block rounded-full bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
                             Recruiter Profile
                         </span>
 
-                        <h1 className="mt-5 text-3xl font-bold text-slate-900">
+                        <h1 className="mt-5 text-2xl font-bold text-slate-900 sm:text-3xl">
                             Create Recruiter Profile
                         </h1>
 
-                        <p className="mt-2 text-slate-600">
+                        <p className="mt-2 text-sm text-slate-600 sm:text-base">
                             Add your company details before posting jobs.
                         </p>
                     </div>
@@ -114,7 +114,7 @@ function RecruiterProfile() {
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
                         <input
                             type="text"
                             name="company_name"
@@ -122,7 +122,7 @@ function RecruiterProfile() {
                             value={formData.company_name}
                             onChange={handleChange}
                             required
-                            className="w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:py-4"
                         />
 
                         <input
@@ -131,7 +131,7 @@ function RecruiterProfile() {
                             placeholder="Company Website"
                             value={formData.company_website}
                             onChange={handleChange}
-                            className="w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:py-4"
                         />
 
                         <input
@@ -140,7 +140,7 @@ function RecruiterProfile() {
                             placeholder="Company Location"
                             value={formData.company_location}
                             onChange={handleChange}
-                            className="w-full rounded-2xl border border-slate-200 px-4 py-4 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:py-4"
                         />
 
                         <textarea
@@ -149,13 +149,13 @@ function RecruiterProfile() {
                             value={formData.company_description}
                             onChange={handleChange}
                             rows="5"
-                            className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-4 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                            className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:py-4"
                         />
 
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 font-bold text-white transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 font-bold text-white transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-200 disabled:cursor-not-allowed disabled:opacity-60 sm:py-4"
                         >
                             {loading ? "Saving..." : "Save Profile"}
                         </button>

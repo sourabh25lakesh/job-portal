@@ -35,6 +35,20 @@ export const getMyRecruiterJobs = async () => {
     }
 };
 
+// ================= GET MY DELETED RECRUITER JOBS =================
+export const getMyDeletedRecruiterJobs = async () => {
+    try {
+        const response = await axiosInstance.get(
+            "/jobs/my-jobs/deleted"
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error("Get Deleted Recruiter Jobs Error:", error);
+        throw error;
+    }
+};
+
 // ================= GET SINGLE JOB =================
 export const getJobById = async (id) => {
     try {
@@ -78,6 +92,20 @@ export const updateJob = async (
         return response.data;
     } catch (error) {
         console.error("Update Job Error:", error);
+        throw error;
+    }
+};
+
+// ================= RESTORE JOB =================
+export const restoreJob = async (jobId) => {
+    try {
+        const response = await axiosInstance.patch(
+            `/jobs/${jobId}/restore`
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error("Restore Job Error:", error);
         throw error;
     }
 };

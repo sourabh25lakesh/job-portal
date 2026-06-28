@@ -54,23 +54,23 @@ function Jobs() {
     };
 
     return (
-        <section className="min-h-screen bg-gray-50 py-12 px-6">
+        <section className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 sm:py-12">
             <div className="max-w-7xl mx-auto">
 
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                     <div>
-                        <h1 className="text-4xl font-bold text-gray-900">
-                            Find Your Dream Job 🚀
+                        <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">
+                            Find Your Dream Job
                         </h1>
 
-                        <p className="mt-3 text-gray-600 text-lg">
+                        <p className="mt-3 text-base text-gray-600 sm:text-lg">
                             Explore thousands of opportunities from top companies.
                         </p>
                     </div>
 
                     <form
                         onSubmit={handleSearch}
-                        className="w-full lg:w-[460px] flex gap-3 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm"
+                        className="flex w-full flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm sm:flex-row lg:w-[460px]"
                     >
                         <input
                             type="text"
@@ -78,7 +78,7 @@ function Jobs() {
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search title, company, location..."
                             className="
-                                flex-1
+                                min-w-0 flex-1
                                 px-4
                                 py-3
                                 rounded-xl
@@ -111,8 +111,8 @@ function Jobs() {
                         <div className="w-14 h-14 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                 ) : jobs.length === 0 ? (
-                    <div className="bg-white rounded-3xl p-14 text-center shadow-sm border border-gray-100 mt-10">
-                        <h2 className="text-3xl font-bold text-gray-800">
+                    <div className="mt-10 rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-sm sm:p-14">
+                        <h2 className="text-2xl font-bold text-gray-800 sm:text-3xl">
                             No Jobs Found
                         </h2>
 
@@ -121,7 +121,7 @@ function Jobs() {
                         </p>
                     </div>
                 ) : (
-                    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-8 mt-10">
+                    <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 xl:gap-8">
                         {jobs.map((job) => (
                             <Link
                                 key={job.id}
@@ -141,10 +141,12 @@ function Jobs() {
                                     block
                                 "
                             >
-                                <div className="p-7">
+                                <div className="p-5 sm:p-7">
                                     <div className="
-                                        w-16
-                                        h-16
+                                        w-14
+                                        h-14
+                                        sm:w-16
+                                        sm:h-16
                                         rounded-2xl
                                         bg-blue-100
                                         flex
@@ -165,7 +167,7 @@ function Jobs() {
                                     <div className="mt-6">
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <h2 className="text-2xl font-bold text-gray-900 group-hover:text-blue-600 transition">
+                                                <h2 className="text-xl font-bold text-gray-900 transition group-hover:text-blue-600 sm:text-2xl">
                                                     {job.title}
                                                 </h2>
 
@@ -174,7 +176,7 @@ function Jobs() {
                                                 </p>
                                             </div>
 
-                                            <span className="bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap">
+                                            <span className="rounded-full bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 sm:px-4 sm:py-2 sm:text-sm">
                                                 {job.job_type || "Full Time"}
                                             </span>
                                         </div>
@@ -183,19 +185,32 @@ function Jobs() {
                                             {job.description}
                                         </p>
 
+                                        {Array.isArray(job.skills) && job.skills.length > 0 && (
+                                            <div className="mt-5 flex flex-wrap gap-2">
+                                                {job.skills.slice(0, 5).map((skill) => (
+                                                    <span
+                                                        key={skill}
+                                                        className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                                                    >
+                                                        {skill}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+
                                         <div className="flex flex-wrap gap-3 mt-6">
                                             <span className="bg-gray-100 px-4 py-2 rounded-xl text-sm text-gray-700">
-                                                📍 {job.location || "Remote"}
+                                                Location: {job.location || "Remote"}
                                             </span>
 
                                             <span className="bg-gray-100 px-4 py-2 rounded-xl text-sm text-gray-700">
-                                                💰 {job.salary || "Not Disclosed"}
+                                                Salary: {job.salary || "Not Disclosed"}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="border-t border-gray-100 p-5 flex items-center justify-between">
+                                <div className="flex flex-col gap-3 border-t border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
                                     <p className="text-sm text-gray-500">
                                         Posted Recently
                                     </p>

@@ -46,13 +46,20 @@ def save_job(
 
     # Check Job Exists
     job = db.query(Job).filter(
-        Job.id == saved_job.job_id
+        Job.id == saved_job.job_id,
+        Job.is_deleted == False
     ).first()
 
     if not job:
         raise HTTPException(
             status_code=404,
             detail="Job not found"
+        )
+
+    if job.status != "approved":
+        raise HTTPException(
+            status_code=403,
+            detail="This job is not available to save yet"
         )
 
     # Check Already Saved
@@ -98,7 +105,12 @@ def get_saved_jobs(
 
     saved_jobs = db.query(
         SavedJob
+    ).join(
+        Job,
+        SavedJob.job_id == Job.id
     ).filter(
+        Job.status == "approved",
+        Job.is_deleted == False,
         SavedJob.user_id == current_user.id
     ).all()
 

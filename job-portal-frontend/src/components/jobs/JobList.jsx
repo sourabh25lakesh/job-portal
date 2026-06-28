@@ -26,7 +26,7 @@ const jobs = [
 
 function JobList() {
     return (
-        <section className="py-20 bg-white">
+        <section className="bg-white py-12 sm:py-16 lg:py-20">
 
             {/* Exact same container as Navbar — max-width 1440px, padding scales with screen */}
             <style>{`
@@ -53,17 +53,17 @@ function JobList() {
             <div className="joblist-container">
 
                 {/* Heading */}
-                <div className="text-center mb-14">
-                    <h2 className="text-6xl font-bold text-gray-900">
+                <div className="mb-10 text-center sm:mb-14">
+                    <h2 className="text-3xl font-bold text-gray-900 sm:text-5xl lg:text-6xl">
                         Featured Jobs
                     </h2>
-                    <p className="mt-4 text-gray-500 text-lg">
+                    <p className="mt-4 text-sm text-gray-500 sm:text-lg">
                         Explore top opportunities from leading companies
                     </p>
                 </div>
 
                 {/* Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
                     {jobs.map((job) => (
                         <JobCard key={job.id} job={job} />
                     ))}

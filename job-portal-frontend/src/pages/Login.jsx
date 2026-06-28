@@ -102,8 +102,8 @@ function Login() {
     };
 
     return (
-        <section className="min-h-screen bg-gray-50 flex items-center justify-center px-6 py-16">
-            <div className="w-full max-w-6xl grid lg:grid-cols-2 bg-white rounded-3xl overflow-hidden shadow-2xl">
+        <section className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8 sm:px-6 sm:py-16">
+            <div className="grid w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl lg:grid-cols-2">
 
                 <div className="hidden lg:flex bg-blue-600 text-white p-14 flex-col justify-center">
                     <h1 className="text-5xl font-bold leading-tight">
@@ -131,10 +131,10 @@ function Login() {
                     </div>
                 </div>
 
-                <div className="p-8 sm:p-12 lg:p-16">
+                <div className="p-6 sm:p-10 lg:p-16">
                     <div className="max-w-md mx-auto">
 
-                        <h2 className="text-4xl font-bold text-gray-900">
+                        <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
                             Login
                         </h2>
 
@@ -150,7 +150,7 @@ function Login() {
 
                         <form
                             onSubmit={handleSubmit}
-                            className="mt-10 space-y-6"
+                            className="mt-8 space-y-5 sm:mt-10 sm:space-y-6"
                         >
                             <div>
                                 <label className="block mb-2 text-sm font-semibold text-gray-700">
@@ -186,7 +186,7 @@ function Login() {
                                 />
                             </div>
 
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <label className="flex items-center gap-2 text-sm text-gray-600">
                                     <input type="checkbox" />
                                     Remember me

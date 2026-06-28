@@ -1,3 +1,5 @@
+import json
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -16,6 +18,7 @@ from app.models.job import Job
 from app.models.user import User
 from app.models.candidate_profile import CandidateProfile
 from app.models.recruiter import RecruiterProfile
+from app.models.interview_request import InterviewRequest
 
 from app.utils.dependencies import get_current_user
 
@@ -44,7 +47,78 @@ def normalize_status(status):
     if value in ["rejected", "reject"]:
         return "rejected"
 
+    if value in ["pending", "applied"]:
+        return "pending"
+
+    return ""
+
+
+def serialize_status(status):
+    return normalize_status(status) or "pending"
+
+
+def normalize_interview_status(status):
+    value = normalize_text(status)
+
+    if value in ["approved", "approve"]:
+        return "approved"
+
+    if value in ["rejected", "reject"]:
+        return "rejected"
+
     return "pending"
+
+
+def normalize_skills(skills):
+    if not skills:
+        return []
+
+    if isinstance(skills, str):
+        try:
+            parsed = json.loads(skills)
+            items = parsed if isinstance(parsed, list) else skills.split(",")
+        except json.JSONDecodeError:
+            items = skills.split(",")
+    else:
+        items = skills
+
+    return [
+        str(skill).strip()
+        for skill in items
+        if str(skill or "").strip()
+    ]
+
+
+def serialize_interview_request(request: InterviewRequest | None):
+    if not request:
+        return None
+
+    return {
+        "id": request.id,
+        "application_id": request.application_id,
+        "job_id": request.job_id,
+        "recruiter_id": request.recruiter_id,
+        "candidate_id": request.candidate_id,
+        "status": normalize_interview_status(request.status),
+        "rejection_reason": request.rejection_reason,
+        "created_at": request.created_at,
+        "updated_at": request.updated_at,
+    }
+
+
+def display_user_name(user: User | None):
+    if not user:
+        return "Candidate"
+
+    name = str(user.name or "").strip()
+
+    if name and name.lower() not in ["undefined", "null", "none"]:
+        return name
+
+    if user.email:
+        return user.email.split("@")[0]
+
+    return "Candidate"
 
 
 def can_manage_job(job: Job, current_user: User, db: Session):
@@ -76,7 +150,15 @@ def can_manage_job(job: Job, current_user: User, db: Session):
 def serialize_application(application: Application, profile: CandidateProfile | None = None):
     candidate = application.user
     job = application.job
-    clean_status = normalize_status(application.status)
+    clean_status = serialize_status(application.status)
+    interview_request = db_interview_request = getattr(
+        application,
+        "interview_request",
+        None
+    )
+
+    if db_interview_request is None:
+        db_interview_request = None
 
     return {
         "id": application.id,
@@ -96,12 +178,15 @@ def serialize_application(application: Application, profile: CandidateProfile | 
             "location": job.location,
             "salary": job.salary,
             "description": job.description,
+            "skills": normalize_skills(job.skills),
+            "status": job.status,
+            "rejection_reason": job.rejection_reason,
             "user_id": job.user_id,
         } if job else None,
 
         "candidate": {
             "id": candidate.id,
-            "name": candidate.name,
+            "name": display_user_name(candidate),
             "email": candidate.email,
             "role": candidate.role,
         } if candidate else {
@@ -117,8 +202,60 @@ def serialize_application(application: Application, profile: CandidateProfile | 
             "experience": profile.experience if profile else None,
             "education": profile.education if profile else None,
             "resume_path": profile.resume_path if profile else None,
-        }
+        },
+        "interview_request": serialize_interview_request(db_interview_request)
     }
+
+
+def get_or_create_interview_request(db: Session, application: Application):
+    existing_request = db.query(InterviewRequest).filter(
+        InterviewRequest.application_id == application.id
+    ).first()
+
+    if existing_request:
+        if existing_request.status != "approved":
+            existing_request.status = "pending"
+            existing_request.rejection_reason = None
+
+        return existing_request
+
+    request = InterviewRequest(
+        application_id=application.id,
+        job_id=application.job_id,
+        recruiter_id=application.job.user_id,
+        candidate_id=application.user_id,
+        status="pending",
+    )
+
+    db.add(request)
+
+    return request
+
+
+def get_or_create_candidate_profile(
+    db: Session,
+    user_id: int,
+):
+    profile = db.query(CandidateProfile).filter(
+        CandidateProfile.user_id == user_id
+    ).first()
+
+    if profile:
+        return profile
+
+    profile = CandidateProfile(
+        user_id=user_id,
+        bio="",
+        skills="",
+        experience="",
+        education="",
+    )
+
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    return profile
 
 
 def update_status_logic(application_id: int, status: str, db: Session, current_user: User):
@@ -157,8 +294,29 @@ def update_status_logic(application_id: int, status: str, db: Session, current_u
 
     application.status = clean_status
 
+    if clean_status == "shortlisted":
+        get_or_create_interview_request(
+            db=db,
+            application=application
+        )
+    else:
+        interview_request = db.query(InterviewRequest).filter(
+            InterviewRequest.application_id == application.id
+        ).first()
+
+        if interview_request and interview_request.status != "rejected":
+            interview_request.status = "rejected"
+            interview_request.rejection_reason = (
+                "Removed from shortlist"
+                if clean_status == "pending"
+                else "Application rejected"
+            )
+
     db.commit()
     db.refresh(application)
+    application.interview_request = db.query(InterviewRequest).filter(
+        InterviewRequest.application_id == application.id
+    ).first()
 
     profile = db.query(CandidateProfile).filter(
         CandidateProfile.user_id == application.user_id
@@ -171,6 +329,112 @@ def update_status_logic(application_id: int, status: str, db: Session, current_u
             profile=profile
         )
     }
+
+
+@router.get("/recruiter/shortlisted")
+def get_shortlisted_candidates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["recruiter", "company", "admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only recruiters can view shortlisted candidates"
+        )
+
+    recruiter_profile = db.query(RecruiterProfile).filter(
+        RecruiterProfile.user_id == current_user.id
+    ).first()
+
+    query = db.query(Application).options(
+        joinedload(Application.user),
+        joinedload(Application.job)
+    ).join(
+        Job,
+        Application.job_id == Job.id
+    ).filter(
+        Application.status == "shortlisted",
+        Job.is_deleted == False
+    )
+
+    if current_user.role != "admin":
+        conditions = [Job.user_id == current_user.id]
+
+        if recruiter_profile and recruiter_profile.company_name:
+            company_name = normalize_text(recruiter_profile.company_name)
+            conditions.append(
+                func.lower(func.trim(Job.company_name)) == company_name
+            )
+
+        query = query.filter(or_(*conditions))
+
+    applications = query.order_by(Application.updated_at.desc()).all()
+    result = []
+
+    for application in applications:
+        application.interview_request = db.query(InterviewRequest).filter(
+            InterviewRequest.application_id == application.id
+        ).first()
+        profile = db.query(CandidateProfile).filter(
+            CandidateProfile.user_id == application.user_id
+        ).first()
+        result.append(serialize_application(application, profile))
+
+    return result
+
+
+@router.get("/interviews")
+def get_my_interviews(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(InterviewRequest).options(
+        joinedload(InterviewRequest.job),
+        joinedload(InterviewRequest.application),
+        joinedload(InterviewRequest.candidate),
+        joinedload(InterviewRequest.recruiter),
+    ).join(
+        Job,
+        InterviewRequest.job_id == Job.id
+    ).filter(
+        Job.is_deleted == False
+    )
+
+    if current_user.role == "candidate":
+        query = query.filter(
+            InterviewRequest.candidate_id == current_user.id,
+            InterviewRequest.status == "approved"
+        )
+    elif current_user.role in ["recruiter", "company"]:
+        query = query.filter(
+            InterviewRequest.recruiter_id == current_user.id,
+            InterviewRequest.status == "approved"
+        )
+    elif current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return [
+        {
+            **serialize_interview_request(request),
+            "job": {
+                "id": request.job.id,
+                "title": request.job.title,
+                "company_name": request.job.company_name,
+                "skills": normalize_skills(request.job.skills),
+            } if request.job else None,
+            "candidate": {
+                "id": request.candidate.id,
+                "name": display_user_name(request.candidate),
+                "email": request.candidate.email,
+            } if request.candidate else None,
+            "recruiter": {
+                "id": request.recruiter.id,
+                "name": display_user_name(request.recruiter),
+                "email": request.recruiter.email,
+            } if request.recruiter else None,
+        }
+        for request in query.order_by(InterviewRequest.updated_at.desc()).all()
+    ]
 
 
 # ================= CANDIDATE: MY APPLICATIONS =================
@@ -189,8 +453,12 @@ def my_applications(
     applications = db.query(Application).options(
         joinedload(Application.job),
         joinedload(Application.user)
+    ).join(
+        Job,
+        Application.job_id == Job.id
     ).filter(
-        Application.user_id == current_user.id
+        Application.user_id == current_user.id,
+        Job.is_deleted == False
     ).order_by(
         Application.id.desc()
     ).all()
@@ -235,6 +503,8 @@ def get_recruiter_applicants(
     ).join(
         Job,
         Application.job_id == Job.id
+    ).filter(
+        Job.is_deleted == False
     )
 
     if current_user.role != "admin":
@@ -287,7 +557,8 @@ def get_job_applications(
         )
 
     job = db.query(Job).filter(
-        Job.id == job_id
+        Job.id == job_id,
+        Job.is_deleted == False
     ).first()
 
     if not job:
@@ -352,6 +623,12 @@ def apply_job(
             detail="Job not found"
         )
 
+    if job.status != "approved":
+        raise HTTPException(
+            status_code=403,
+            detail="This job is not open for applications yet"
+        )
+
     existing_application = db.query(Application).filter(
         Application.job_id == job_id,
         Application.user_id == current_user.id
@@ -359,7 +636,7 @@ def apply_job(
 
     if existing_application:
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail="You already applied for this job"
         )
 
@@ -374,11 +651,23 @@ def apply_job(
     db.commit()
     db.refresh(new_application)
 
+    profile = get_or_create_candidate_profile(
+        db=db,
+        user_id=current_user.id
+    )
+
+    new_application = db.query(Application).options(
+        joinedload(Application.user),
+        joinedload(Application.job)
+    ).filter(
+        Application.id == new_application.id
+    ).first()
+
     return {
         "message": "Job applied successfully",
         "application": serialize_application(
             application=new_application,
-            profile=None
+            profile=profile
         )
     }
 
@@ -541,3 +830,4 @@ def delete_application(
     return {
         "message": "Application deleted successfully"
     }
+import json

@@ -3,11 +3,9 @@ import os
 
 load_dotenv()
 
-# ================= DATABASE =================
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# ================= JWT =================
 
 SECRET_KEY = os.getenv(
     "SECRET_KEY",
@@ -26,7 +24,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
     )
 )
 
-# ================= GOOGLE LOGIN =================
 
 GOOGLE_CLIENT_ID = os.getenv(
     "GOOGLE_CLIENT_ID",
@@ -38,7 +35,6 @@ GOOGLE_CLIENT_SECRET = os.getenv(
     ""
 )
 
-# ================= URLS =================
 
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
@@ -50,7 +46,6 @@ BACKEND_URL = os.getenv(
     "http://127.0.0.1:8000"
 )
 
-# ================= SESSION =================
 
 SESSION_SECRET_KEY = os.getenv(
     "SESSION_SECRET_KEY",

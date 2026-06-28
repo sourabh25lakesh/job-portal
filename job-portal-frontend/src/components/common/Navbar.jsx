@@ -149,13 +149,13 @@ function Navbar() {
                         ${scrolled ? "shadow-lg" : ""}
                     `}
                 >
-                    <div className="w-full px-6 sm:px-10 lg:px-14 xl:px-20">
-                        <div className="flex items-center justify-between h-[74px] gap-8">
+                    <div className="w-full px-4 sm:px-6 lg:px-14 xl:px-20">
+                        <div className="flex h-16 items-center justify-between gap-3 md:h-[74px] md:gap-8">
                             <Link
                                 to="/"
                                 className="
                                     flex-shrink-0
-                                    text-[1.7rem]
+                                    text-2xl sm:text-[1.7rem]
                                     font-extrabold
                                     tracking-tight
                                     text-gray-900
@@ -324,9 +324,9 @@ function Navbar() {
                     {menuOpen && (
                         <div className="
                             md:hidden bg-white border-t border-gray-100
-                            px-6 py-5 animate-[fadeIn_0.2s_ease-in-out]
+                            px-4 py-4 animate-[fadeIn_0.2s_ease-in-out]
                         ">
-                            <div className="flex flex-col gap-2">
+                            <div className="flex max-h-[calc(100vh-4rem)] flex-col gap-2 overflow-y-auto pb-2">
                                 {NAV_LINKS.map((item) => (
                                     <Link
                                         key={item.path}
@@ -450,9 +450,9 @@ function Navbar() {
                     ">
                         <div className="
                             w-14 h-14 rounded-2xl bg-red-100 text-red-600
-                            flex items-center justify-center text-2xl mb-5
+                            flex items-center justify-center text-xl font-black mb-5
                         ">
-                            🚪
+                            LO
                         </div>
 
                         <h2 className="text-2xl font-bold text-gray-900">

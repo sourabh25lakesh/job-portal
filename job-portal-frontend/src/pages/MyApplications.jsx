@@ -1,5 +1,6 @@
 import {
     useEffect,
+    useRef,
     useState,
 } from "react";
 
@@ -14,6 +15,12 @@ import {
     deleteApplication,
 } from "../api/applicationApi";
 
+import {
+    getApplicationStatusClass,
+    getApplicationStatusLabel,
+    normalizeApplicationStatus,
+} from "../utils/applicationStatus";
+
 function MyApplications() {
     const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -22,14 +29,44 @@ function MyApplications() {
 
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+    const refreshTimeoutRef = useRef(null);
 
-    // Debug: Log applications state whenever it changes
-    useEffect(() => {
-        console.log("📊 CANDIDATE: Applications state updated:", applications);
-        applications.forEach((app, idx) => {
-            console.log(`  [${idx}] ID: ${app.id}, Status: ${app.status}, Job: ${app.job?.title}`);
-        });
-    }, [applications]);
+    const normalizeApplications = (data) => {
+        return Array.isArray(data)
+            ? data.map((application) => ({
+                ...application,
+                status: normalizeApplicationStatus(application.status),
+                resume_viewed: Boolean(application.resume_viewed),
+            }))
+            : [];
+    };
+
+    const getApplicationsSnapshot = (items) => {
+        return JSON.stringify(
+            items.map((application) => ({
+                id: application.id,
+                status: normalizeApplicationStatus(application.status),
+                resume_viewed: Boolean(application.resume_viewed),
+                updated_at: application.updated_at || null,
+                job_id: application.job_id || application.job?.id || null,
+                title: application.job?.title || "",
+                company_name: application.job?.company_name || "",
+                location: application.job?.location || "",
+                salary: application.job?.salary || "",
+                description: application.job?.description || "",
+                skills: application.job?.skills || [],
+                job_status: application.job?.status || "",
+            }))
+        );
+    };
+
+    const updateApplicationsIfChanged = (nextApplications) => {
+        setApplications((previousApplications) =>
+            getApplicationsSnapshot(previousApplications) === getApplicationsSnapshot(nextApplications)
+                ? previousApplications
+                : nextApplications
+        );
+    };
 
     const fetchApplications = async (skipLoadingState = false) => {
         try {
@@ -39,10 +76,9 @@ function MyApplications() {
             setErrorMessage("");
 
             const data = await getMyApplications();
-            console.log("📥 CANDIDATE: Fetched applications from backend:", data);
+            const cleanApplications = normalizeApplications(data);
 
-            setApplications(Array.isArray(data) ? data : []);
-            console.log("✅ CANDIDATE: State updated with applications:", Array.isArray(data) ? data : []);
+            updateApplicationsIfChanged(cleanApplications);
         } catch (error) {
             const message =
                 error.response?.data?.detail ||
@@ -50,7 +86,10 @@ function MyApplications() {
                 "Failed to load applications";
 
             setErrorMessage(message);
-            toast.error(message);
+
+            if (!skipLoadingState) {
+                toast.error(message);
+            }
         } finally {
             if (!skipLoadingState) {
                 setLoading(false);
@@ -60,11 +99,6 @@ function MyApplications() {
 
     useEffect(() => {
         fetchApplications();
-
-        // Polling - refresh every 5 seconds (reduced from 2)
-        const refreshInterval = setInterval(() => {
-            fetchApplications(true); // Skip loading state
-        }, 5000);
 
         // Refresh immediately when window gains focus
         const handleWindowFocus = () => {
@@ -78,72 +112,79 @@ function MyApplications() {
             }
         };
 
-        // Listen for real-time status updates from recruiter - UPDATE ONLY, don't refetch
-        const handleApplicationStatusUpdated = (event) => {
-            const { applicationId, status } = event.detail;
-            
-            console.log("✅ CUSTOM EVENT FIRED - Received application status update:", { applicationId, status });
-            console.log("🔍 Current applications in state BEFORE update:", applications);
-            
-            setApplications((prevApplications) => {
-                console.log("📝 Callback for setApplications called");
-                console.log("🔍 prevApplications:", prevApplications);
-                
-                const updated = prevApplications.map((app) => {
-                    if (app.id === applicationId) {
-                        console.log(`✏️ Updating app ${applicationId}: "${app.status}" → "${status}"`);
-                        return { ...app, status: status };
-                    }
-                    return app;
-                });
-                
-                console.log("📊 Updated applications after map:", updated);
-                return updated;
-            });
+        const mergeApplicationUpdate = (update) => {
+            const applicationId = update?.applicationId ?? update?.application?.id;
 
-            // Force refetch to ensure accuracy from backend
-            console.log("⏰ Scheduling refetch in 100ms...");
-            setTimeout(() => {
-                console.log("🔄 REFETCHING from backend...");
+            if (!applicationId) {
+                return;
+            }
+
+            setApplications((prevApplications) => {
+                const nextApplications = prevApplications.map((application) => {
+                    if (String(application.id) !== String(applicationId)) {
+                        return application;
+                    }
+
+                    const updatedApplication = update.application || {};
+
+                    return {
+                        ...application,
+                        ...updatedApplication,
+                        status: normalizeApplicationStatus(
+                            updatedApplication.status ?? update.status ?? application.status
+                        ),
+                        resume_viewed: Boolean(
+                            updatedApplication.resume_viewed ??
+                            update.resume_viewed ??
+                            application.resume_viewed
+                        ),
+                    };
+                });
+
+                return getApplicationsSnapshot(prevApplications) === getApplicationsSnapshot(nextApplications)
+                    ? prevApplications
+                    : nextApplications;
+            });
+        };
+
+        const refetchSoon = () => {
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+
+            refreshTimeoutRef.current = setTimeout(() => {
                 fetchApplications(true);
-            }, 100); // Reduced to 100ms for faster sync
+                refreshTimeoutRef.current = null;
+            }, 300);
+        };
+
+        // Listen for real-time updates from recruiter tabs.
+        const handleApplicationStatusUpdated = (event) => {
+            mergeApplicationUpdate(event.detail);
+            refetchSoon();
+        };
+
+        const handleApplicationResumeViewed = (event) => {
+            mergeApplicationUpdate({
+                ...event.detail,
+                resume_viewed: true,
+            });
+            refetchSoon();
         };
 
         // Listen for localStorage changes (from other tabs)
         const handleStorageChange = (event) => {
-            console.log("🔔 STORAGE EVENT FIRED - Key:", event.key, "New Value:", event.newValue);
-            
-            // Listen for lastApplicationUpdate key which is set by recruiter
-            if (event.key === "lastApplicationUpdate" && event.newValue) {
+            if (
+                (event.key === "lastApplicationUpdate" ||
+                    event.key === "lastApplicationResumeViewed") &&
+                event.newValue
+            ) {
                 try {
                     const data = JSON.parse(event.newValue);
-                    console.log("✅ STORAGE EVENT - Received cross-tab application update:", data);
-                    console.log("🔍 Current applications in state BEFORE storage update:", applications);
-                    
-                    setApplications((prevApplications) => {
-                        console.log("📝 Callback for setApplications called from storage");
-                        console.log("🔍 prevApplications from storage:", prevApplications);
-                        
-                        const updated = prevApplications.map((app) => {
-                            if (app.id === data.applicationId) {
-                                console.log(`✏️ STORAGE UPDATE: Updating app ${data.applicationId}: "${app.status}" → "${data.status}"`);
-                                return { ...app, status: data.status };
-                            }
-                            return app;
-                        });
-                        
-                        console.log("📊 Updated applications after storage update:", updated);
-                        return updated;
-                    });
-
-                    // Force refetch to ensure accuracy from backend
-                    console.log("⏰ Scheduling refetch in 100ms after storage event...");
-                    setTimeout(() => {
-                        console.log("🔄 REFETCHING from backend after storage event...");
-                        fetchApplications(true);
-                    }, 100);
+                    mergeApplicationUpdate(data);
+                    refetchSoon();
                 } catch (e) {
-                    console.error("❌ Error parsing storage update:", e);
+                    console.error("Error parsing application update:", e);
                 }
             }
         };
@@ -151,50 +192,21 @@ function MyApplications() {
         window.addEventListener("focus", handleWindowFocus);
         document.addEventListener("visibilitychange", handleVisibilityChange);
         window.addEventListener("applicationStatusUpdated", handleApplicationStatusUpdated);
+        window.addEventListener("applicationResumeViewed", handleApplicationResumeViewed);
         window.addEventListener("storage", handleStorageChange);
 
         return () => {
-            clearInterval(refreshInterval);
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+
             window.removeEventListener("focus", handleWindowFocus);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             window.removeEventListener("applicationStatusUpdated", handleApplicationStatusUpdated);
+            window.removeEventListener("applicationResumeViewed", handleApplicationResumeViewed);
             window.removeEventListener("storage", handleStorageChange);
         };
     }, []);
-
-    const normalizeStatus = (status) => {
-        const value = String(status || "")
-            .trim()
-            .toLowerCase();
-
-        if (value === "shortlist") {
-            return "shortlisted";
-        }
-
-        if (value === "reject") {
-            return "rejected";
-        }
-
-        if (["pending", "shortlisted", "rejected"].includes(value)) {
-            return value;
-        }
-
-        return "pending";
-    };
-
-    const getStatusLabel = (status) => {
-        const cleanStatus = normalizeStatus(status);
-
-        if (cleanStatus === "shortlisted") {
-            return "Shortlisted";
-        }
-
-        if (cleanStatus === "rejected") {
-            return "Rejected";
-        }
-
-        return "Pending";
-    };
 
     const openDeleteModal = (applicationId) => {
         setSelectedApplicationId(applicationId);
@@ -236,29 +248,6 @@ function MyApplications() {
         }
     };
 
-    const getStatusStyle = (status) => {
-        const cleanStatus = normalizeStatus(status);
-
-        if (cleanStatus === "shortlisted") {
-            return "bg-green-100 text-green-700";
-        }
-
-        if (cleanStatus === "rejected") {
-            return "bg-red-100 text-red-700";
-        }
-
-        return "bg-yellow-100 text-yellow-700";
-    };
-
-    const getStatusIcon = (status) => {
-        const cleanStatus = normalizeStatus(status);
-
-        if (cleanStatus === "shortlisted") return "✅";
-        if (cleanStatus === "rejected") return "❌";
-
-        return "⏳";
-    };
-
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -268,22 +257,22 @@ function MyApplications() {
     }
 
     return (
-        <section className="min-h-screen bg-gray-50 py-12 px-6">
+        <section className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 sm:py-12">
             <div className="max-w-7xl mx-auto">
 
                 <div className="mb-10 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
                     <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-4xl font-bold text-gray-900">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">
                                 My Applications
                             </h1>
                             <span className="inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-full px-3 py-1 text-xs font-semibold text-green-700">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                                 Live Updates
                             </span>
                         </div>
 
-                        <p className="mt-3 text-lg text-gray-500">
+                        <p className="mt-3 text-base text-gray-500 sm:text-lg">
                             Track job status, recruiter resume views, shortlist and rejection updates.
                         </p>
                     </div>
@@ -292,14 +281,14 @@ function MyApplications() {
                         <button
                             onClick={fetchApplications}
                             disabled={loading}
-                            className="inline-flex items-center justify-center bg-green-600 hover:bg-green-700 hover:-translate-y-1 text-white px-6 py-3 rounded-2xl font-semibold transition-all duration-300 shadow-sm hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="inline-flex items-center justify-center bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-2xl font-semibold transition-colors duration-300 shadow-sm hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             🔄 {loading ? "Refreshing..." : "Refresh"}
                         </button>
 
                         <Link
                             to="/jobs"
-                            className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 text-white px-6 py-3 rounded-2xl font-semibold transition-all duration-300 shadow-sm hover:shadow-lg"
+                            className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-semibold transition-colors duration-300 shadow-sm hover:shadow-lg"
                         >
                             Browse More Jobs
                         </Link>
@@ -313,10 +302,12 @@ function MyApplications() {
                 )}
 
                 {applications.length === 0 ? (
-                    <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm">
-                        <div className="text-7xl">📭</div>
+                    <div className="rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-sm sm:p-16">
+                        <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-xl font-black text-blue-700">
+                            AP
+                        </div>
 
-                        <h2 className="mt-6 text-3xl font-bold text-gray-900">
+                        <h2 className="mt-6 text-2xl font-bold text-gray-900 sm:text-3xl">
                             No Applications Yet
                         </h2>
 
@@ -326,7 +317,7 @@ function MyApplications() {
 
                         <Link
                             to="/jobs"
-                            className="inline-block mt-8 bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 text-white px-8 py-4 rounded-2xl font-semibold transition-all duration-300 shadow-lg"
+                            className="inline-block mt-8 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-semibold transition-colors duration-300 shadow-lg"
                         >
                             Browse Jobs
                         </Link>
@@ -338,13 +329,13 @@ function MyApplications() {
                                 application.job_id ||
                                 application.job?.id;
 
-                            const cleanStatus = normalizeStatus(application.status);
-                            const statusLabel = getStatusLabel(application.status);
+                            const cleanStatus = normalizeApplicationStatus(application.status);
+                            const statusLabel = getApplicationStatusLabel(application.status);
 
                             return (
                                 <div
                                     key={application.id}
-                                    className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                                className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow duration-300 hover:shadow-xl sm:p-8"
                                 >
                                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
 
@@ -358,14 +349,14 @@ function MyApplications() {
                                                 }
                                             </div>
 
-                                            <h2 className="text-2xl font-bold text-gray-900 hover:text-blue-600 transition">
+                                            <h2 className="break-words text-xl font-bold text-gray-900 transition hover:text-blue-600 sm:text-2xl">
                                                 {
                                                     application.job?.title ||
                                                     "Job Title"
                                                 }
                                             </h2>
 
-                                            <p className="mt-2 text-lg text-gray-500">
+                                            <p className="mt-2 text-base text-gray-500 sm:text-lg">
                                                 {
                                                     application.job?.company_name ||
                                                     "Company"
@@ -377,57 +368,70 @@ function MyApplications() {
                                                 <span
                                                     className={`
                                                         px-4 py-2 rounded-xl text-sm font-semibold
-                                                        ${getStatusStyle(cleanStatus)}
+                                                        ${getApplicationStatusClass(cleanStatus)}
                                                     `}
                                                 >
-                                                    {getStatusIcon(cleanStatus)} {statusLabel}
+                                                    {statusLabel}
                                                 </span>
 
                                                 {application.resume_viewed ? (
                                                     <span className="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-sm font-semibold">
-                                                        ✅ Resume Viewed by Recruiter
+                                                        Resume Viewed by Recruiter
                                                     </span>
                                                 ) : (
                                                     <span className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold">
-                                                        ⏳ Resume Not Viewed Yet
+                                                        Resume Not Viewed Yet
                                                     </span>
                                                 )}
 
                                                 <span className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm">
-                                                    📍 {
+                                                    Location: {
                                                         application.job?.location ||
                                                         "Location"
                                                     }
                                                 </span>
 
                                                 <span className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm">
-                                                    💰 {
+                                                    Salary: {
                                                         application.job?.salary ||
                                                         "Not Disclosed"
                                                     }
                                                 </span>
                                             </div>
 
+                                            {Array.isArray(application.job?.skills) && application.job.skills.length > 0 && (
+                                                <div className="mt-4 flex flex-wrap gap-2">
+                                                    {application.job.skills.map((skill) => (
+                                                        <span
+                                                            key={skill}
+                                                            className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+                                                        >
+                                                            {skill}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
                                             {cleanStatus === "shortlisted" && (
                                                 <p className="mt-5 rounded-2xl bg-green-50 px-5 py-4 text-green-700 font-medium">
-                                                    🎉 Congratulations! Recruiter shortlisted your application.
+                                                    Congratulations! Recruiter shortlisted your application.
                                                 </p>
                                             )}
 
                                             {cleanStatus === "rejected" && (
                                                 <p className="mt-5 rounded-2xl bg-red-50 px-5 py-4 text-red-700 font-medium">
-                                                    ❌ Your application was rejected for this job.
+                                                    Your application was rejected for this job.
                                                 </p>
                                             )}
 
                                             {cleanStatus === "pending" && (
                                                 <p className="mt-5 rounded-2xl bg-yellow-50 px-5 py-4 text-yellow-700 font-medium">
-                                                    ⏳ Your application is pending recruiter review.
+                                                    Your application is pending recruiter review.
                                                 </p>
                                             )}
                                         </div>
 
-                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                                        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4 lg:flex-col xl:flex-row">
                                             {jobId && (
                                                 <Link
                                                     to={`/jobs/${jobId}`}

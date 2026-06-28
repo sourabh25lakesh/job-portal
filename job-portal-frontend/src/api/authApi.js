@@ -26,7 +26,7 @@ export const loginUser = async (userData) => {
 export const registerUser = async (userData) => {
     const formData = new FormData();
 
-    formData.append("name", userData.name);
+    formData.append("name", userData.name || userData.full_name);
     formData.append("email", userData.email);
     formData.append("password", userData.password);
     formData.append("role", userData.role);

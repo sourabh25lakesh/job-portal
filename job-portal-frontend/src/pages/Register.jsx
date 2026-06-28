@@ -1,9 +1,6 @@
 import { useState } from "react";
-
 import { Link, useNavigate } from "react-router-dom";
-
 import { FcGoogle } from "react-icons/fc";
-
 import toast from "react-hot-toast";
 
 import {
@@ -17,7 +14,7 @@ function Register() {
     const navigate = useNavigate();
 
     const [formData, setFormData] = useState({
-        full_name: "",
+        name: "",
         email: "",
         password: "",
         confirm_password: "",
@@ -29,18 +26,46 @@ function Register() {
     const [imageError, setImageError] = useState(false);
 
     const handleChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value,
-        });
+        const { name, value } = e.target;
+
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
         setErrorMessage("");
 
-        if (formData.password !== formData.confirm_password) {
+        const name = formData.name.trim();
+        const email = formData.email.trim().toLowerCase();
+        const password = formData.password.trim();
+        const confirmPassword = formData.confirm_password.trim();
+        const role = formData.role;
+
+        if (!name) {
+            const message = "Full name is required";
+            setErrorMessage(message);
+            toast.error(message);
+            return;
+        }
+
+        if (!email) {
+            const message = "Email is required";
+            setErrorMessage(message);
+            toast.error(message);
+            return;
+        }
+
+        if (password.length < 6) {
+            const message = "Password must be at least 6 characters";
+            setErrorMessage(message);
+            toast.error(message);
+            return;
+        }
+
+        if (password !== confirmPassword) {
             const message = "Passwords do not match";
             setErrorMessage(message);
             toast.error(message);
@@ -51,13 +76,22 @@ function Register() {
             setLoading(true);
 
             await registerUser({
-                full_name: formData.full_name,
-                email: formData.email,
-                password: formData.password,
-                role: formData.role,
+                name,
+                full_name: name,
+                email,
+                password,
+                role,
             });
 
             toast.success("Account created successfully");
+
+            setFormData({
+                name: "",
+                email: "",
+                password: "",
+                confirm_password: "",
+                role: "candidate",
+            });
 
             setTimeout(() => {
                 navigate("/login");
@@ -65,9 +99,11 @@ function Register() {
         } catch (error) {
             console.log(error);
 
-            const message =
-                error.response?.data?.detail ||
-                "Registration failed";
+            const detail = error?.response?.data?.detail;
+
+            const message = Array.isArray(detail)
+                ? detail.map((err) => err?.msg).join(", ")
+                : detail || error?.message || "Registration failed";
 
             setErrorMessage(message);
             toast.error(message);
@@ -77,8 +113,8 @@ function Register() {
     };
 
     return (
-        <section className="min-h-screen bg-gray-50 flex items-center justify-center px-6 py-16">
-            <div className="w-full max-w-6xl grid lg:grid-cols-2 bg-white rounded-3xl overflow-hidden shadow-2xl">
+        <section className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8 sm:px-6 sm:py-16">
+            <div className="grid w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl lg:grid-cols-2">
                 <div className="hidden lg:flex bg-blue-600 text-white p-14 flex-col justify-center">
                     <h1 className="text-5xl font-bold leading-tight">
                         Start Your Career..
@@ -105,9 +141,9 @@ function Register() {
                     </div>
                 </div>
 
-                <div className="p-8 sm:p-12 lg:p-16">
+                <div className="p-6 sm:p-10 lg:p-16">
                     <div className="max-w-md mx-auto">
-                        <h2 className="text-4xl font-bold text-gray-900">
+                        <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
                             Create Account
                         </h2>
 
@@ -121,10 +157,7 @@ function Register() {
                             </div>
                         )}
 
-                        <form
-                            onSubmit={handleSubmit}
-                            className="mt-10 space-y-5"
-                        >
+                        <form onSubmit={handleSubmit} className="mt-8 space-y-5 sm:mt-10">
                             <div>
                                 <label className="block mb-2 text-sm font-semibold text-gray-700">
                                     Full Name
@@ -132,11 +165,12 @@ function Register() {
 
                                 <input
                                     type="text"
-                                    name="full_name"
-                                    value={formData.full_name}
+                                    name="name"
+                                    value={formData.name}
                                     onChange={handleChange}
                                     placeholder="Enter your full name"
                                     required
+                                    autoComplete="name"
                                     className="w-full px-5 py-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition"
                                 />
                             </div>
@@ -153,6 +187,7 @@ function Register() {
                                     onChange={handleChange}
                                     placeholder="Enter your email"
                                     required
+                                    autoComplete="email"
                                     className="w-full px-5 py-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition"
                                 />
                             </div>
@@ -169,6 +204,7 @@ function Register() {
                                     onChange={handleChange}
                                     placeholder="Create password"
                                     required
+                                    autoComplete="new-password"
                                     className="w-full px-5 py-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition"
                                 />
                             </div>
@@ -185,6 +221,7 @@ function Register() {
                                     onChange={handleChange}
                                     placeholder="Confirm password"
                                     required
+                                    autoComplete="new-password"
                                     className="w-full px-5 py-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition"
                                 />
                             </div>
@@ -200,25 +237,14 @@ function Register() {
                                     onChange={handleChange}
                                     className="w-full px-5 py-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition bg-white"
                                 >
-                                    <option value="candidate">
-                                        Candidate
-                                    </option>
-
-                                    <option value="recruiter">
-                                        Recruiter
-                                    </option>
+                                    <option value="candidate">Candidate</option>
+                                    <option value="recruiter">Recruiter</option>
                                 </select>
                             </div>
 
                             <label className="flex items-start gap-3 text-sm text-gray-600">
-                                <input
-                                    type="checkbox"
-                                    className="mt-1"
-                                    required
-                                />
-
-                                I agree to the Terms & Conditions and Privacy
-                                Policy
+                                <input type="checkbox" className="mt-1" required />
+                                I agree to the Terms & Conditions and Privacy Policy
                             </label>
 
                             <button
@@ -226,41 +252,20 @@ function Register() {
                                 disabled={loading}
                                 className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 hover:scale-[1.01] transition duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                {loading
-                                    ? "Creating Account..."
-                                    : "Create Account"}
+                                {loading ? "Creating Account..." : "Create Account"}
                             </button>
                         </form>
 
                         <div className="my-8 flex items-center">
                             <div className="flex-1 border-t border-gray-200"></div>
-
-                            <span className="px-4 text-sm text-gray-400">
-                                OR
-                            </span>
-
+                            <span className="px-4 text-sm text-gray-400">OR</span>
                             <div className="flex-1 border-t border-gray-200"></div>
                         </div>
 
                         <button
                             type="button"
                             onClick={continueWithGoogle}
-                            className="
-                                w-full
-                                flex
-                                items-center
-                                justify-center
-                                gap-3
-                                border
-                                border-gray-300
-                                py-4
-                                rounded-xl
-                                font-semibold
-                                text-gray-800
-                                hover:bg-gray-100
-                                hover:border-gray-400
-                                transition
-                            "
+                            className="w-full flex items-center justify-center gap-3 border border-gray-300 py-4 rounded-xl font-semibold text-gray-800 hover:bg-gray-100 hover:border-gray-400 transition"
                         >
                             <FcGoogle className="text-2xl" />
                             Continue with Google
@@ -268,7 +273,6 @@ function Register() {
 
                         <p className="mt-8 text-center text-gray-600">
                             Already have an account?
-
                             <Link
                                 to="/login"
                                 className="ml-2 text-blue-600 font-semibold hover:underline"

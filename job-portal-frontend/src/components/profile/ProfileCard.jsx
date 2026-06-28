@@ -13,10 +13,10 @@ function ProfileCard({ completionPercentage = 0 }) {
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-6">
 
             <div className="flex items-center justify-between mb-5">
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-lg font-bold text-gray-900 sm:text-xl">
                     Profile Completion
                 </h2>
 
@@ -34,7 +34,7 @@ function ProfileCard({ completionPercentage = 0 }) {
                 ></div>
             </div>
 
-            <p className="mt-4 text-gray-600 leading-relaxed">
+            <p className="mt-4 text-sm leading-relaxed text-gray-600 sm:text-base">
                 Your profile is{" "}
                 <span className="text-blue-600 font-bold">
                     {completionPercentage}% complete

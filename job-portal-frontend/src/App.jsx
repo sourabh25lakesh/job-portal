@@ -26,11 +26,13 @@ import Contact from "./pages/Contact";
 import ContactMessages from "./pages/ContactMessages";
 
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminJobApprovals from "./pages/AdminJobApprovals";
 
 import RecruiterDashboard from "./pages/recruiter/RecruiterDashboard";
 import RecruiterProfile from "./pages/recruiter/RecruiterProfile";
 import CreateRecruiterJob from "./pages/recruiter/CreateJob";
 import MyJobs from "./pages/recruiter/MyJobs";
+import DeletedJobs from "./pages/recruiter/DeletedJobs";
 import JobApplications from "./pages/recruiter/JobApplications";
 import RecruiterApplications from "./pages/recruiter/RecruiterApplications";
 
@@ -39,7 +41,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 function App() {
     return (
         <BrowserRouter>
-            <div className="flex min-h-screen flex-col bg-gray-50">
+            <div className="flex min-h-screen flex-col overflow-x-hidden bg-gray-50">
                 <Navbar />
 
                 <main className="flex-grow">
@@ -134,6 +136,15 @@ function App() {
                         />
 
                         <Route
+                            path="/recruiter/deleted-jobs"
+                            element={
+                                <ProtectedRoute allowedRoles={["company", "recruiter", "admin"]}>
+                                    <DeletedJobs />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
                             path="/recruiter/applied-candidates"
                             element={
                                 <ProtectedRoute allowedRoles={["company", "recruiter", "admin"]}>
@@ -184,6 +195,15 @@ function App() {
                             element={
                                 <ProtectedRoute allowedRoles={["admin"]}>
                                     <ContactMessages />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/admin/job-approvals"
+                            element={
+                                <ProtectedRoute allowedRoles={["admin"]}>
+                                    <AdminJobApprovals />
                                 </ProtectedRoute>
                             }
                         />

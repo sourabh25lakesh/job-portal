@@ -28,6 +28,16 @@ function JobDetails() {
     const [showAppliedCard, setShowAppliedCard] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
 
+    const getUserStorageKey = () => {
+        const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+
+        return storedUser?.id || storedUser?.email || "guest";
+    };
+
+    const getSavedJobsKey = () => `savedJobs:${getUserStorageKey()}`;
+    const getAppliedJobsKey = () => `appliedJobs:${getUserStorageKey()}`;
+    const getCurrentJobId = () => String(job?.id || id);
+
     useEffect(() => {
         fetchJob();
         checkSavedJob();
@@ -52,11 +62,11 @@ function JobDetails() {
 
     const checkSavedJob = () => {
         const savedJobs = JSON.parse(
-            localStorage.getItem("savedJobs") || "[]"
+            localStorage.getItem(getSavedJobsKey()) || "[]"
         );
 
         const isSaved = savedJobs.some(
-            (jobId) => String(jobId) === String(id)
+            (jobId) => String(jobId) === getCurrentJobId()
         );
 
         setSaved(isSaved);
@@ -64,15 +74,15 @@ function JobDetails() {
 
     const removeAppliedJobFromLocalStorage = () => {
         const appliedJobs = JSON.parse(
-            localStorage.getItem("appliedJobs") || "[]"
+            localStorage.getItem(getAppliedJobsKey()) || "[]"
         );
 
         const updatedAppliedJobs = appliedJobs.filter(
-            (jobId) => String(jobId) !== String(id)
+            (jobId) => String(jobId) !== getCurrentJobId()
         );
 
         localStorage.setItem(
-            "appliedJobs",
+            getAppliedJobsKey(),
             JSON.stringify(updatedAppliedJobs)
         );
     };
@@ -94,7 +104,7 @@ function JobDetails() {
                     application.job?.id ||
                     application.job?.job_id;
 
-                return String(applicationJobId) === String(id);
+                return String(applicationJobId) === getCurrentJobId();
             });
 
             if (isApplied) {
@@ -110,11 +120,12 @@ function JobDetails() {
             console.log(error);
 
             const appliedJobs = JSON.parse(
-                localStorage.getItem("appliedJobs") || "[]"
+                localStorage.getItem(getAppliedJobsKey()) || "[]"
             );
 
-            const isApplied = appliedJobs.some(
-                (jobId) => String(jobId) === String(id)
+            const hasToken = Boolean(localStorage.getItem("token"));
+            const isApplied = hasToken && appliedJobs.some(
+                (jobId) => String(jobId) === getCurrentJobId()
             );
 
             setApplied(isApplied);
@@ -124,18 +135,18 @@ function JobDetails() {
 
     const saveAppliedJobToLocalStorage = () => {
         const appliedJobs = JSON.parse(
-            localStorage.getItem("appliedJobs") || "[]"
+            localStorage.getItem(getAppliedJobsKey()) || "[]"
         );
 
         const alreadyApplied = appliedJobs.some(
-            (jobId) => String(jobId) === String(id)
+            (jobId) => String(jobId) === getCurrentJobId()
         );
 
         if (!alreadyApplied) {
-            appliedJobs.push(id);
+            appliedJobs.push(getCurrentJobId());
 
             localStorage.setItem(
-                "appliedJobs",
+                getAppliedJobsKey(),
                 JSON.stringify(appliedJobs)
             );
         }
@@ -151,10 +162,16 @@ function JobDetails() {
             setApplying(true);
             setErrorMessage("");
 
-            const data = await applyJob(id);
+            const jobIdToApply = job?.id;
+
+            if (!jobIdToApply) {
+                throw new Error("Unable to identify this job. Please refresh and try again.");
+            }
+
+            const data = await applyJob(jobIdToApply);
 
             const message =
-                data.message || "Job applied successfully";
+                data.message || `Applied to ${job.title} successfully`;
 
             setApplied(true);
             setShowAppliedCard(true);
@@ -166,6 +183,7 @@ function JobDetails() {
 
             const message =
                 error.response?.data?.detail ||
+                error.message ||
                 "Failed to apply job";
 
             if (
@@ -176,7 +194,7 @@ function JobDetails() {
                 setShowAppliedCard(true);
                 saveAppliedJobToLocalStorage();
 
-                toast.success("Application already submitted");
+                toast.error("You already applied for this job");
             } else {
                 setErrorMessage(message);
                 toast.error(message);
@@ -190,30 +208,30 @@ function JobDetails() {
         if (!job) return;
 
         const savedJobs = JSON.parse(
-            localStorage.getItem("savedJobs") || "[]"
+            localStorage.getItem(getSavedJobsKey()) || "[]"
         );
 
         const isAlreadySaved = savedJobs.some(
-            (jobId) => String(jobId) === String(id)
+            (jobId) => String(jobId) === getCurrentJobId()
         );
 
         if (isAlreadySaved) {
             const updatedJobs = savedJobs.filter(
-                (jobId) => String(jobId) !== String(id)
+                (jobId) => String(jobId) !== getCurrentJobId()
             );
 
             localStorage.setItem(
-                "savedJobs",
+                getSavedJobsKey(),
                 JSON.stringify(updatedJobs)
             );
 
             setSaved(false);
             toast.success("Job removed from saved jobs");
         } else {
-            savedJobs.push(id);
+            savedJobs.push(getCurrentJobId());
 
             localStorage.setItem(
-                "savedJobs",
+                getSavedJobsKey(),
                 JSON.stringify(savedJobs)
             );
 
@@ -243,24 +261,24 @@ function JobDetails() {
     }
 
     return (
-        <section className="min-h-screen bg-gray-50 py-12 px-6">
+        <section className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 sm:py-12">
             <div className="max-w-7xl mx-auto">
-                <div className="grid lg:grid-cols-3 gap-8">
+                <div className="grid gap-6 lg:grid-cols-3 lg:gap-8">
                     <div className="lg:col-span-2">
                         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                            <div className="p-10">
-                                <div className="w-20 h-20 rounded-3xl bg-blue-100 flex items-center justify-center text-3xl font-bold text-blue-600">
+                            <div className="p-6 sm:p-10">
+                                <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-100 text-2xl font-bold text-blue-600 sm:h-20 sm:w-20 sm:text-3xl">
                                     {job.company_name
                                         ?.charAt(0)
                                         ?.toUpperCase() || "C"}
                                 </div>
 
                                 <div className="mt-8">
-                                    <h1 className="text-4xl font-bold text-gray-900">
+                                    <h1 className="break-words text-3xl font-bold text-gray-900 sm:text-4xl">
                                         {job.title}
                                     </h1>
 
-                                    <p className="mt-3 text-xl text-gray-500">
+                                    <p className="mt-3 text-lg text-gray-500 sm:text-xl">
                                         {job.company_name || "Company"}
                                     </p>
 
@@ -270,25 +288,38 @@ function JobDetails() {
                                         </span>
 
                                         <span className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm">
-                                            📍 {job.location || "Remote"}
+                                            Location: {job.location || "Remote"}
                                         </span>
 
                                         <span className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm">
-                                            💰 {job.salary || "Not Disclosed"}
+                                            Salary: {job.salary || "Not Disclosed"}
                                         </span>
                                     </div>
+
+                                    {Array.isArray(job.skills) && job.skills.length > 0 && (
+                                        <div className="mt-6 flex flex-wrap gap-2">
+                                            {job.skills.map((skill) => (
+                                                <span
+                                                    key={skill}
+                                                    className="rounded-full bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700"
+                                                >
+                                                    {skill}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
                             <div className="border-t border-gray-100"></div>
 
-                            <div className="p-10 space-y-10">
+                            <div className="space-y-8 p-6 sm:space-y-10 sm:p-10">
                                 <div>
                                     <h2 className="text-2xl font-bold text-gray-900">
                                         Job Description
                                     </h2>
 
-                                    <p className="mt-5 text-gray-600 leading-relaxed text-lg">
+                                    <p className="mt-5 text-base leading-relaxed text-gray-600 sm:text-lg">
                                         {job.description}
                                     </p>
                                 </div>
@@ -323,7 +354,7 @@ function JobDetails() {
                     </div>
 
                     <div>
-                        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 sticky top-28">
+                        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm lg:sticky lg:top-28 lg:p-8">
                             <h2 className="text-2xl font-bold text-gray-900">
                                 Apply for this job
                             </h2>
@@ -385,20 +416,20 @@ function JobDetails() {
                                 {saved ? "Saved Job" : "Save Job"}
                             </button>
 
-                            <div className="mt-8 pt-8 border-t border-gray-100 space-y-4">
-                                <div className="flex items-center justify-between">
+                            <div className="mt-8 space-y-4 border-t border-gray-100 pt-8">
+                                <div className="flex items-center justify-between gap-4">
                                     <span className="text-gray-500">Experience</span>
                                     <span className="font-semibold">2+ Years</span>
                                 </div>
 
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-4">
                                     <span className="text-gray-500">Job Type</span>
                                     <span className="font-semibold">
                                         {job.job_type || "Full Time"}
                                     </span>
                                 </div>
 
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-4">
                                     <span className="text-gray-500">Location</span>
                                     <span className="font-semibold">
                                         {job.location || "Remote"}

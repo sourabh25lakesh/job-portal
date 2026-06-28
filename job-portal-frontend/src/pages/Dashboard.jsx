@@ -1,5 +1,6 @@
 import {
     useEffect,
+    useRef,
     useState,
 } from "react";
 
@@ -7,15 +8,26 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
-import { getMyApplications } from "../api/applicationApi";
+import {
+    getMyApplications,
+    getMyInterviews,
+} from "../api/applicationApi";
+
+import {
+    getApplicationStatusClass,
+    getApplicationStatusLabel,
+    normalizeApplicationStatus,
+} from "../utils/applicationStatus";
 
 function Dashboard() {
     const { user } = useAuth();
 
     const [loading, setLoading] = useState(true);
     const [applications, setApplications] = useState([]);
+    const [interviews, setInterviews] = useState([]);
     const [savedJobsCount, setSavedJobsCount] = useState(0);
     const [appliedJobsCount, setAppliedJobsCount] = useState(0);
+    const refreshTimeoutRef = useRef(null);
 
     const getValidName = () => {
         const possibleName =
@@ -36,55 +48,43 @@ function Dashboard() {
         return possibleName;
     };
 
-    const normalizeStatus = (status) => {
-        const value = String(status || "")
-            .trim()
-            .toLowerCase();
-
-        if (value === "shortlist") {
-            return "shortlisted";
-        }
-
-        if (value === "reject") {
-            return "rejected";
-        }
-
-        if (["pending", "shortlisted", "rejected"].includes(value)) {
-            return value;
-        }
-
-        return "pending";
-    };
-
-    const getStatusLabel = (status) => {
-        const cleanStatus = normalizeStatus(status);
-
-        if (cleanStatus === "shortlisted") {
-            return "Shortlisted";
-        }
-
-        if (cleanStatus === "rejected") {
-            return "Rejected";
-        }
-
-        return "Pending";
-    };
-
-    const getStatusStyle = (status) => {
-        const cleanStatus = normalizeStatus(status);
-
-        if (cleanStatus === "shortlisted") {
-            return "bg-green-100 text-green-700";
-        }
-
-        if (cleanStatus === "rejected") {
-            return "bg-red-100 text-red-700";
-        }
-
-        return "bg-yellow-100 text-yellow-700";
-    };
-
     const displayName = getValidName();
+
+    const normalizeApplications = (data) => {
+        return Array.isArray(data)
+            ? data.map((application) => ({
+                ...application,
+                status: normalizeApplicationStatus(application.status),
+                resume_viewed: Boolean(application.resume_viewed),
+            }))
+            : [];
+    };
+
+    const getApplicationsSnapshot = (items) => {
+        return JSON.stringify(
+            items.map((application) => ({
+                id: application.id,
+                status: normalizeApplicationStatus(application.status),
+                resume_viewed: Boolean(application.resume_viewed),
+                updated_at: application.updated_at || null,
+                job_id: application.job_id || application.job?.id || null,
+                title: application.job?.title || "",
+                company_name: application.job?.company_name || "",
+                location: application.job?.location || "",
+                salary: application.job?.salary || "",
+                skills: application.job?.skills || [],
+                job_status: application.job?.status || "",
+            }))
+        );
+    };
+
+    const updateApplicationsIfChanged = (nextApplications) => {
+        setApplications((previousApplications) =>
+            getApplicationsSnapshot(previousApplications) === getApplicationsSnapshot(nextApplications)
+                ? previousApplications
+                : nextApplications
+        );
+    };
 
     useEffect(() => {
         fetchDashboardData();
@@ -96,23 +96,49 @@ function Dashboard() {
                 updateLocalCounts();
             }
 
-            // Listen for lastApplicationUpdate key which is set by recruiter
-            if (event.key === "lastApplicationUpdate" && event.newValue) {
+            if (
+                (event.key === "lastApplicationUpdate" ||
+                    event.key === "lastApplicationResumeViewed") &&
+                event.newValue
+            ) {
                 try {
                     const data = JSON.parse(event.newValue);
-                    console.log("📲 Dashboard received cross-tab update:", data);
+                    const applicationId = data.applicationId ?? data.application?.id;
                     
-                    setApplications((prevApplications) =>
-                        prevApplications.map((app) =>
-                            app.id === data.applicationId
-                                ? { ...app, status: data.status }
-                                : app
-                        )
-                    );
+                    setApplications((prevApplications) => {
+                        const nextApplications = prevApplications.map((application) => {
+                            if (String(application.id) !== String(applicationId)) {
+                                return application;
+                            }
 
-                    // Force refetch to ensure accuracy from backend
-                    setTimeout(() => {
+                            const updatedApplication = data.application || {};
+
+                            return {
+                                ...application,
+                                ...updatedApplication,
+                                status: normalizeApplicationStatus(
+                                    updatedApplication.status ?? data.status ?? application.status
+                                ),
+                                resume_viewed: Boolean(
+                                    updatedApplication.resume_viewed ??
+                                    data.resume_viewed ??
+                                    application.resume_viewed
+                                ),
+                            };
+                        });
+
+                        return getApplicationsSnapshot(prevApplications) === getApplicationsSnapshot(nextApplications)
+                            ? prevApplications
+                            : nextApplications;
+                    });
+
+                    if (refreshTimeoutRef.current) {
+                        clearTimeout(refreshTimeoutRef.current);
+                    }
+
+                    refreshTimeoutRef.current = setTimeout(() => {
                         fetchDashboardData(true);
+                        refreshTimeoutRef.current = null;
                     }, 500);
                 } catch (e) {
                     console.error("Error parsing storage update:", e);
@@ -121,11 +147,6 @@ function Dashboard() {
         };
 
         window.addEventListener("storage", handleStorageChange);
-
-        // Polling - refresh every 5 seconds (reduced from 2) to prevent flickering
-        const refreshInterval = setInterval(() => {
-            fetchDashboardData(true); // Skip loading state
-        }, 5000);
 
         // Refresh immediately when window gains focus
         const handleWindowFocus = () => {
@@ -141,48 +162,71 @@ function Dashboard() {
 
         // Listen for real-time status updates from recruiter - UPDATE ONLY, don't refetch
         const handleApplicationStatusUpdated = (event) => {
-            const { applicationId, status } = event.detail;
+            const update = event.detail || {};
+            const applicationId = update.applicationId ?? update.application?.id;
             
-            console.log("📲 Dashboard received application status update:", { applicationId, status });
-            
-            setApplications((prevApplications) =>
-                prevApplications.map((app) =>
-                    app.id === applicationId
-                        ? { ...app, status: status }
-                        : app
-                )
-            );
+            setApplications((prevApplications) => {
+                const nextApplications = prevApplications.map((application) => {
+                    if (String(application.id) !== String(applicationId)) {
+                        return application;
+                    }
 
-            // Force refetch to ensure accuracy from backend
-            setTimeout(() => {
+                    const updatedApplication = update.application || {};
+
+                    return {
+                        ...application,
+                        ...updatedApplication,
+                        status: normalizeApplicationStatus(
+                            updatedApplication.status ?? update.status ?? application.status
+                        ),
+                        resume_viewed: Boolean(
+                            updatedApplication.resume_viewed ??
+                            update.resume_viewed ??
+                            application.resume_viewed
+                        ),
+                    };
+                });
+
+                return getApplicationsSnapshot(prevApplications) === getApplicationsSnapshot(nextApplications)
+                    ? prevApplications
+                    : nextApplications;
+            });
+
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+
+            refreshTimeoutRef.current = setTimeout(() => {
                 fetchDashboardData(true);
+                refreshTimeoutRef.current = null;
             }, 500);
         };
 
         window.addEventListener("focus", handleWindowFocus);
         document.addEventListener("visibilitychange", handleVisibilityChange);
         window.addEventListener("applicationStatusUpdated", handleApplicationStatusUpdated);
+        window.addEventListener("applicationResumeViewed", handleApplicationStatusUpdated);
 
         return () => {
             window.removeEventListener("storage", handleStorageChange);
-            clearInterval(refreshInterval);
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+
             window.removeEventListener("focus", handleWindowFocus);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             window.removeEventListener("applicationStatusUpdated", handleApplicationStatusUpdated);
+            window.removeEventListener("applicationResumeViewed", handleApplicationStatusUpdated);
         };
     }, []);
 
     const updateLocalCounts = () => {
+        const userStorageKey = user?.id || user?.email || "guest";
         const savedJobs = JSON.parse(
-            localStorage.getItem("savedJobs") || "[]"
-        );
-
-        const appliedJobs = JSON.parse(
-            localStorage.getItem("appliedJobs") || "[]"
+            localStorage.getItem(`savedJobs:${userStorageKey}`) || "[]"
         );
 
         setSavedJobsCount(savedJobs.length);
-        setAppliedJobsCount(appliedJobs.length);
     };
 
     const fetchDashboardData = async (skipLoadingState = false) => {
@@ -194,22 +238,17 @@ function Dashboard() {
             updateLocalCounts();
 
             const data = await getMyApplications();
+            const interviewData = await getMyInterviews();
+            const cleanApplications = normalizeApplications(data);
 
-            setApplications(Array.isArray(data) ? data : []);
+            updateApplicationsIfChanged(cleanApplications);
+            setInterviews(Array.isArray(interviewData) ? interviewData : []);
 
             const backendAppliedCount = Array.isArray(data)
                 ? data.length
                 : 0;
 
-            const localAppliedJobs = JSON.parse(
-                localStorage.getItem("appliedJobs") || "[]"
-            );
-
-            setAppliedJobsCount(
-                backendAppliedCount > 0
-                    ? backendAppliedCount
-                    : localAppliedJobs.length
-            );
+            setAppliedJobsCount(backendAppliedCount);
         } catch (error) {
             console.log(error);
             updateLocalCounts();
@@ -229,22 +268,22 @@ function Dashboard() {
     }
 
     return (
-        <section className="min-h-screen bg-gray-50 py-10 px-6">
+        <section className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 sm:py-10">
             <div className="max-w-7xl mx-auto">
 
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                     <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-4xl font-bold text-gray-900">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <h1 className="text-2xl font-bold text-gray-900 sm:text-4xl">
                                 Dashboard
                             </h1>
                             <span className="inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-full px-3 py-1 text-xs font-semibold text-green-700">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                                 Live Updates
                             </span>
                         </div>
 
-                        <p className="mt-3 text-gray-600 text-lg">
+                        <p className="mt-3 text-sm text-gray-600 sm:text-lg">
                             Welcome back,
                             <span className="font-semibold text-blue-600 ml-2">
                                 {displayName}
@@ -254,7 +293,7 @@ function Dashboard() {
 
                     <Link
                         to="/candidate-profile"
-                        className="bg-white border border-gray-100 shadow-sm rounded-3xl px-6 py-4 flex items-center gap-4 hover:shadow-md transition"
+                        className="flex items-center gap-4 rounded-3xl border border-gray-100 bg-white px-5 py-4 shadow-sm transition hover:-translate-y-1 hover:shadow-md sm:px-6"
                     >
                         <div className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center text-xl font-bold">
                             {displayName.charAt(0).toUpperCase()}
@@ -276,57 +315,57 @@ function Dashboard() {
                     </Link>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mt-10">
+                <div className="mt-8 grid grid-cols-2 gap-4 sm:mt-10 xl:grid-cols-4 xl:gap-6">
 
-                    <div className="bg-white rounded-3xl p-7 border border-gray-100 shadow-sm hover:shadow-lg transition">
-                        <p className="text-gray-500 font-medium">
+                    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg sm:p-7">
+                        <p className="text-sm font-medium text-gray-500 sm:text-base">
                             Applied Jobs
                         </p>
 
-                        <h2 className="text-5xl font-bold text-blue-600 mt-5">
+                        <h2 className="mt-4 text-3xl font-bold text-blue-600 sm:mt-5 sm:text-5xl">
                             {appliedJobsCount}
                         </h2>
                     </div>
 
-                    <div className="bg-white rounded-3xl p-7 border border-gray-100 shadow-sm hover:shadow-lg transition">
-                        <p className="text-gray-500 font-medium">
+                    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg sm:p-7">
+                        <p className="text-sm font-medium text-gray-500 sm:text-base">
                             Saved Jobs
                         </p>
 
-                        <h2 className="text-5xl font-bold text-green-600 mt-5">
+                        <h2 className="mt-4 text-3xl font-bold text-green-600 sm:mt-5 sm:text-5xl">
                             {savedJobsCount}
                         </h2>
                     </div>
 
-                    <div className="bg-white rounded-3xl p-7 border border-gray-100 shadow-sm hover:shadow-lg transition">
-                        <p className="text-gray-500 font-medium">
+                    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg sm:p-7">
+                        <p className="text-sm font-medium text-gray-500 sm:text-base">
                             Interviews
                         </p>
 
-                        <h2 className="text-5xl font-bold text-orange-500 mt-5">
-                            0
+                        <h2 className="mt-4 text-3xl font-bold text-orange-500 sm:mt-5 sm:text-5xl">
+                            {interviews.length}
                         </h2>
                     </div>
 
-                    <div className="bg-white rounded-3xl p-7 border border-gray-100 shadow-sm hover:shadow-lg transition">
-                        <p className="text-gray-500 font-medium">
+                    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg sm:p-7">
+                        <p className="text-sm font-medium text-gray-500 sm:text-base">
                             Profile Views
                         </p>
 
-                        <h2 className="text-5xl font-bold text-purple-600 mt-5">
+                        <h2 className="mt-4 text-3xl font-bold text-purple-600 sm:mt-5 sm:text-5xl">
                             0
                         </h2>
                     </div>
 
                 </div>
 
-                <div className="grid lg:grid-cols-3 gap-8 mt-10">
+                <div className="mt-8 grid gap-6 lg:mt-10 lg:grid-cols-3 lg:gap-8">
 
                     <div className="lg:col-span-2">
-                        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+                        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm sm:p-8">
 
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-2xl font-bold text-gray-900">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
                                     Recent Applications
                                 </h2>
 
@@ -360,7 +399,7 @@ function Dashboard() {
                                     applications.slice(0, 3).map((application) => (
                                         <div
                                             key={application.id}
-                                            className="border border-gray-100 rounded-2xl p-5 flex items-center justify-between hover:bg-gray-50 transition"
+                                            className="flex flex-col gap-3 rounded-2xl border border-gray-100 p-4 transition hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between sm:p-5"
                                         >
                                             <div>
                                                 <h3 className="font-semibold text-lg text-gray-800">
@@ -375,10 +414,10 @@ function Dashboard() {
                                             <span
                                                 className={`
                                                     px-4 py-2 rounded-full text-sm font-medium
-                                                    ${getStatusStyle(application.status)}
+                                                    ${getApplicationStatusClass(application.status)}
                                                 `}
                                             >
-                                                {getStatusLabel(application.status)}
+                                                {getApplicationStatusLabel(application.status)}
                                             </span>
                                         </div>
                                     ))
@@ -386,6 +425,30 @@ function Dashboard() {
                             </div>
 
                         </div>
+
+                        {interviews.length > 0 && (
+                            <div className="mt-8 bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+                                <h2 className="text-2xl font-bold text-gray-900">
+                                    Approved Interviews
+                                </h2>
+
+                                <div className="mt-6 space-y-4">
+                                    {interviews.slice(0, 3).map((interview) => (
+                                        <div
+                                            key={interview.id}
+                                            className="rounded-2xl border border-green-100 bg-green-50 p-5"
+                                        >
+                                            <h3 className="font-bold text-green-900">
+                                                {interview.job?.title || "Interview"}
+                                            </h3>
+                                            <p className="mt-1 text-sm text-green-700">
+                                                {interview.job?.company_name || "Company"} • Approved by admin
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-8">
