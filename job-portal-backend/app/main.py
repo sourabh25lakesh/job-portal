@@ -144,10 +144,26 @@ app.add_middleware(
 )
 
 
-FRONTEND_URLS = os.getenv(
+frontend_urls = os.getenv(
     "FRONTEND_URLS",
     "http://localhost:5173,http://127.0.0.1:5173"
-).split(",")
+)
+
+FRONTEND_URLS = [
+    url.strip()
+    for url in frontend_urls.split(",")
+    if url.strip()
+]
+
+print("=" * 60)
+print("Allowed CORS Origins:")
+for url in FRONTEND_URLS:
+    print(" -", url)
+print("=" * 60)
+print("FRONTEND_URLS:", FRONTEND_URLS)
+print("FRONTEND_URL :", os.getenv("FRONTEND_URL"))
+print("BACKEND_URL  :", os.getenv("BACKEND_URL"))
+print("=" * 60)
 
 app.add_middleware(
     CORSMiddleware,
